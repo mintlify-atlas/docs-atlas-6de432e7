@@ -1,0 +1,190 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Zvec",
+  "projectDescription": "A lightweight, lightning-fast, in-process vector database built on Alibaba's Proxima engine",
+  "theme": "palm",
+  "primaryColor": "#6165fc",
+  "lightColor": "#040404",
+  "darkColor": "#4204fc",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/collections",
+              "concepts/schemas",
+              "concepts/vectors",
+              "concepts/indexing",
+              "concepts/querying"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/dense-vectors",
+              "guides/sparse-vectors",
+              "guides/hybrid-search",
+              "guides/filtering",
+              "guides/embeddings",
+              "guides/performance-tuning"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/openai",
+              "integrations/qwen",
+              "integrations/sentence-transformers",
+              "integrations/bm25"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/index-types",
+              "advanced/quantization",
+              "advanced/reranking",
+              "advanced/multi-vector",
+              "advanced/building-from-source"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Initialization",
+            "pages": [
+              "api/init",
+              "api/create-and-open",
+              "api/open"
+            ]
+          },
+          {
+            "group": "Collection",
+            "pages": [
+              "api/collection/overview",
+              "api/collection/insert",
+              "api/collection/query",
+              "api/collection/update",
+              "api/collection/delete",
+              "api/collection/schema-management"
+            ]
+          },
+          {
+            "group": "Schema Types",
+            "pages": [
+              "api/schema/collection-schema",
+              "api/schema/vector-schema",
+              "api/schema/field-schema",
+              "api/schema/data-types"
+            ]
+          },
+          {
+            "group": "Query Types",
+            "pages": [
+              "api/query/vector-query",
+              "api/query/hnsw-params",
+              "api/query/ivf-params"
+            ]
+          },
+          {
+            "group": "Index Parameters",
+            "pages": [
+              "api/index/hnsw",
+              "api/index/ivf",
+              "api/index/flat",
+              "api/index/inverted"
+            ]
+          },
+          {
+            "group": "Embedding Functions",
+            "pages": [
+              "api/embeddings/overview",
+              "api/embeddings/dense",
+              "api/embeddings/sparse",
+              "api/embeddings/openai",
+              "api/embeddings/qwen",
+              "api/embeddings/sentence-transformers",
+              "api/embeddings/bm25"
+            ]
+          },
+          {
+            "group": "Re-ranking",
+            "pages": [
+              "api/reranking/overview",
+              "api/reranking/rrf",
+              "api/reranking/weighted",
+              "api/reranking/qwen"
+            ]
+          },
+          {
+            "group": "Types & Enums",
+            "pages": [
+              "api/types/data-type",
+              "api/types/metric-type",
+              "api/types/quantize-type",
+              "api/types/index-type",
+              "api/types/status"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Additional Resources",
+            "pages": [
+              "resources/benchmarks",
+              "resources/examples",
+              "resources/faq",
+              "resources/troubleshooting",
+              "resources/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "In-process vector database with no server required",
+    "Multiple index algorithms (HNSW, IVF, Flat) for optimal performance",
+    "Dense and sparse vector support with multi-vector queries",
+    "Hybrid search combining semantic similarity with structured filters",
+    "Built-in embedding functions for OpenAI, Qwen, and SentenceTransformers",
+    "Advanced re-ranking capabilities (RRF, Weighted, Model-based)",
+    "Production-grade performance powered by Alibaba's Proxima engine",
+    "Quantization support for memory-efficient storage"
+  ],
+  "publicApiSurface": [
+    "zvec.init() - Initialize the engine with configuration",
+    "zvec.create_and_open() - Create and open a new collection",
+    "zvec.open() - Open an existing collection",
+    "Collection.insert() - Insert documents with vectors",
+    "Collection.query() - Query by vector similarity",
+    "Collection.update() - Update documents",
+    "Collection.delete() - Delete documents",
+    "Collection.create_index() - Build indexes on vector columns",
+    "VectorQuery - Define vector similarity queries",
+    "CollectionSchema - Define collection structure",
+    "VectorSchema - Define vector column schemas",
+    "HnswIndexParam - Configure HNSW index",
+    "IVFIndexParam - Configure IVF index",
+    "DenseEmbeddingFunction - Base class for dense embeddings",
+    "SparseEmbeddingFunction - Base class for sparse embeddings",
+    "ReRanker - Base class for re-ranking implementations"
+  ]
+}
