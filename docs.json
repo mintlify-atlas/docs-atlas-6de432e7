@@ -150,10 +150,13 @@
           {
             "group": "Types & Enums",
             "pages": [
+              "api/types/doc",
               "api/types/data-type",
               "api/types/metric-type",
               "api/types/quantize-type",
               "api/types/index-type",
+              "api/types/log-level",
+              "api/types/log-type",
               "api/types/status"
             ]
           }

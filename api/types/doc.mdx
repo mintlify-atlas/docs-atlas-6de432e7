@@ -1,0 +1,168 @@
+---
+title: "Doc"
+description: "Document class for representing search results and insertions"
+---
+
+## Overview
+
+The `Doc` class represents a document in Zvec with its metadata, vectors, and scalar fields. It is used both for inserting new documents and representing search results.
+
+## Class Definition
+
+```python
+class Doc:
+    """Represents a document with optional metadata, fields, and vectors."""
+```
+
+## Attributes
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the document. Must be unique within a collection.
+</ParamField>
+
+<ParamField path="score" type="Optional[float]" default="None">
+  Relevance score from search queries. Automatically populated by query operations. Higher scores indicate better matches.
+</ParamField>
+
+<ParamField path="vectors" type="Optional[dict[str, VectorType]]" default="None">
+  Named vector embeddings associated with the document. Keys must match vector field names defined in the collection schema.
+  
+  Values can be:
+  - Python lists: `[0.1, 0.2, 0.3]`
+  - NumPy arrays: `np.array([0.1, 0.2, 0.3])` (automatically converted to lists)
+</ParamField>
+
+<ParamField path="fields" type="Optional[dict[str, Any]]" default="None">
+  Scalar metadata fields (e.g., title, category, timestamp). Keys must match field names in the collection schema.
+  
+  Supported value types depend on the field schema (strings, numbers, booleans, arrays).
+</ParamField>
+
+## Methods
+
+### vector()
+
+Get a specific vector by name.
+
+```python
+def vector(self, name: str) -> Optional[list[float]]
+```
+
+<ParamField path="name" type="str" required>
+  Name of the vector field to retrieve.
+</ParamField>
+
+**Returns:** The vector as a list of floats, or `None` if not found.
+
+### field()
+
+Get a specific scalar field by name.
+
+```python
+def field(self, name: str) -> Optional[Any]
+```
+
+<ParamField path="name" type="str" required>
+  Name of the field to retrieve.
+</ParamField>
+
+**Returns:** The field value, or `None` if not found.
+
+## Usage Examples
+
+### Creating Documents for Insertion
+
+```python
+import zvec
+import numpy as np
+
+# Simple document with vector only
+doc1 = zvec.Doc(
+    id="doc_1",
+    vectors={"embedding": [0.1, 0.2, 0.3, 0.4]}
+)
+
+# Document with metadata fields
+doc2 = zvec.Doc(
+    id="doc_2",
+    vectors={"embedding": [0.2, 0.3, 0.4, 0.1]},
+    fields={
+        "title": "Getting Started with Zvec",
+        "category": "tutorial",
+        "views": 1250
+    }
+)
+
+# Using NumPy arrays (automatically converted)
+doc3 = zvec.Doc(
+    id="doc_3",
+    vectors={"embedding": np.array([0.3, 0.1, 0.2, 0.4])},
+    fields={"title": "Advanced Topics"}
+)
+
+# Insert into collection
+collection.insert([doc1, doc2, doc3])
+```
+
+### Working with Search Results
+
+```python
+# Query returns Doc objects with scores
+results = collection.query(
+    zvec.VectorQuery("embedding", vector=[0.4, 0.3, 0.3, 0.1]),
+    topk=3
+)
+
+# Access result properties
+for doc in results:
+    print(f"ID: {doc.id}")
+    print(f"Score: {doc.score}")
+    print(f"Title: {doc.field('title')}")
+    print(f"Vector: {doc.vector('embedding')}")
+```
+
+### Multi-Vector Documents
+
+```python
+# Document with multiple vectors
+doc = zvec.Doc(
+    id="doc_multi",
+    vectors={
+        "dense": [0.1, 0.2, 0.3, 0.4],
+        "sparse": {0: 0.5, 10: 0.3, 50: 0.2}  # Sparse format
+    },
+    fields={"content": "Multi-vector document"}
+)
+
+collection.insert(doc)
+```
+
+## Important Notes
+
+<Note>
+**Immutability**: Doc objects are immutable. All attributes are set during initialization and cannot be modified afterward.
+</Note>
+
+<Note>
+**Automatic Conversion**: NumPy arrays in the `vectors` dict are automatically converted to Python lists for JSON serialization and immutability.
+</Note>
+
+<Warning>
+**ID Uniqueness**: Document IDs must be unique within a collection. Inserting a document with an existing ID will fail unless using `upsert()`.
+</Warning>
+
+<Tip>
+**Type Hints**: Use type hints when creating documents to catch errors early:
+```python
+from zvec import Doc
+
+doc: Doc = zvec.Doc(id="example", vectors={"emb": [0.1, 0.2]})
+```
+</Tip>
+
+## See Also
+
+- [Collection.insert()](/api/collection/insert) - Insert documents into a collection
+- [Collection.query()](/api/collection/query) - Query documents by similarity
+- [CollectionSchema](/api/schema/collection-schema) - Define document structure
+- [VectorSchema](/api/schema/vector-schema) - Define vector fields

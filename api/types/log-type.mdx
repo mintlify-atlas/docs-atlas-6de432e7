@@ -1,0 +1,200 @@
+---
+title: "LogType"
+description: "Log output destination for Zvec"
+---
+
+## Overview
+
+The `LogType` enum specifies where Zvec's log messages should be written. Choose between console output for development or file-based logging for production.
+
+## Enum Values
+
+### CONSOLE
+
+```python
+LogType.CONSOLE = 0
+```
+
+Output logs to standard output/error (terminal or IDE console).
+
+**Best for:**
+- Development and debugging
+- Interactive sessions (Jupyter notebooks, REPL)
+- Docker containers with log aggregation
+- Serverless environments (logs captured by platform)
+
+**Behavior:**
+- Logs appear in real-time in your terminal
+- DEBUG/INFO → stdout
+- WARN/ERROR/FATAL → stderr
+- No log rotation (handled by system)
+
+### FILE
+
+```python
+LogType.FILE = 1
+```
+
+Write logs to persistent files on disk with automatic rotation.
+
+**Best for:**
+- Production deployments
+- Long-running services
+- Applications requiring audit trails
+- Systems without centralized logging
+
+**Behavior:**
+- Logs written to specified directory
+- Automatic file rotation based on size
+- Old logs cleaned up after retention period
+- Configurable file naming and size limits
+
+## Configuration Options
+
+When using `LogType.FILE`, these additional parameters control file behavior:
+
+<ParamField path="log_dir" type="str" default='"./logs"'>
+  Directory for log files. Must exist (not created automatically).
+</ParamField>
+
+<ParamField path="log_basename" type="str" default='"zvec.log"'>
+  Base name for log files. Rotated files get numbered suffixes (e.g., `zvec.log.1`).
+</ParamField>
+
+<ParamField path="log_file_size" type="int" default="2048">
+  Maximum size per log file in MB before rotation.
+</ParamField>
+
+<ParamField path="log_overdue_days" type="int" default="7">
+  Days to retain rotated log files before deletion.
+</ParamField>
+
+## Usage Examples
+
+### Console Logging (Development)
+
+```python
+import zvec
+from zvec import LogType, LogLevel
+
+# Simple console logging
+zvec.init(
+    log_type=LogType.CONSOLE,
+    log_level=LogLevel.INFO
+)
+
+# Logs appear in terminal
+collection = zvec.create_and_open(...)
+# Output: [INFO] Collection opened: ./my_collection
+```
+
+### File Logging (Production)
+
+```python
+import zvec
+from zvec import LogType, LogLevel
+import os
+
+# Ensure log directory exists
+os.makedirs("/var/log/myapp", exist_ok=True)
+
+# Configure file-based logging
+zvec.init(
+    log_type=LogType.FILE,
+    log_level=LogLevel.WARN,
+    log_dir="/var/log/myapp",
+    log_basename="zvec.log",
+    log_file_size=4096,      # 4GB per file
+    log_overdue_days=30      # Keep for 30 days
+)
+
+# Logs written to /var/log/myapp/zvec.log
+collection = zvec.create_and_open(...)
+```
+
+### File Rotation Behavior
+
+```bash
+# Log files with rotation:
+/var/log/myapp/zvec.log        # Current active log
+/var/log/myapp/zvec.log.1      # Previous rotation
+/var/log/myapp/zvec.log.2      # Older rotation
+/var/log/myapp/zvec.log.3      # Oldest (deleted after retention period)
+```
+
+## Use Case Recommendations
+
+<Tabs>
+  <Tab title="Development">
+    ```python
+    zvec.init(
+        log_type=LogType.CONSOLE,
+        log_level=LogLevel.DEBUG  # See everything
+    )
+    ```
+    
+    **Why:** Immediate feedback in terminal, no file management needed.
+  </Tab>
+  
+  <Tab title="Docker/Kubernetes">
+    ```python
+    zvec.init(
+        log_type=LogType.CONSOLE,
+        log_level=LogLevel.INFO
+    )
+    ```
+    
+    **Why:** Container platforms capture stdout/stderr. File logging adds complexity.
+  </Tab>
+  
+  <Tab title="Traditional Servers">
+    ```python
+    zvec.init(
+        log_type=LogType.FILE,
+        log_level=LogLevel.WARN,
+        log_dir="/var/log/myapp",
+        log_file_size=2048,
+        log_overdue_days=14
+    )
+    ```
+    
+    **Why:** Persistent logs for troubleshooting, automatic rotation and cleanup.
+  </Tab>
+  
+  <Tab title="Serverless">
+    ```python
+    zvec.init(
+        log_type=LogType.CONSOLE,
+        log_level=LogLevel.ERROR
+    )
+    ```
+    
+    **Why:** Platform handles log aggregation. File I/O may not be available.
+  </Tab>
+</Tabs>
+
+## Important Notes
+
+<Warning>
+**Directory Must Exist**: When using `LogType.FILE`, ensure the `log_dir` exists before initializing Zvec. The directory is not created automatically.
+
+```python
+import os
+os.makedirs("/var/log/myapp", exist_ok=True)
+zvec.init(log_type=LogType.FILE, log_dir="/var/log/myapp")
+```
+</Warning>
+
+<Note>
+**File Permissions**: The process running Zvec must have write permissions to the log directory.
+</Note>
+
+<Tip>
+**Log Aggregation**: In production, consider using `LogType.CONSOLE` with a log aggregation service (e.g., ELK, Splunk, CloudWatch) instead of managing files directly.
+</Tip>
+
+## See Also
+
+- [LogLevel](/api/types/log-level) - Configure logging verbosity
+- [zvec.init()](/api/init) - Complete initialization API
+- [Status](/api/types/status) - Error handling and status codes

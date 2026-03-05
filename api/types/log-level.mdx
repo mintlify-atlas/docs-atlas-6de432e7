@@ -1,0 +1,167 @@
+---
+title: "LogLevel"
+description: "Logging severity levels for Zvec"
+---
+
+## Overview
+
+The `LogLevel` enum defines logging severity levels for controlling the verbosity of Zvec's output. Levels are ordered from lowest to highest priority, with higher values indicating more severe conditions.
+
+## Enum Values
+
+### DEBUG
+
+```python
+LogLevel.DEBUG = 0
+```
+
+Detailed diagnostic information, typically of interest only when diagnosing problems. Use this level during development or troubleshooting.
+
+**Example use cases:**
+- Tracing internal function calls
+- Inspecting intermediate data structures
+- Performance profiling details
+
+### INFO
+
+```python
+LogLevel.INFO = 1
+```
+
+Confirmation that things are working as expected. General informational messages about normal operations.
+
+**Example use cases:**
+- Collection opened successfully
+- Index built successfully
+- Query completed
+
+### WARN / WARNING
+
+```python
+LogLevel.WARN = 2
+LogLevel.WARNING = 2  # Alias
+```
+
+An indication that something unexpected happened, or a sign of potential future problems. The operation continues, but attention may be needed.
+
+<Note>
+`WARNING` is an alias for `WARN` to match Python's built-in `logging` module convention.
+</Note>
+
+**Example use cases:**
+- Deprecated API usage
+- Suboptimal configuration detected
+- Resource approaching limits
+
+### ERROR
+
+```python
+LogLevel.ERROR = 3
+```
+
+Due to a more serious problem, the software has not been able to perform some function. The application can still continue running.
+
+**Example use cases:**
+- Failed to insert a document
+- Query execution failed
+- Index corruption detected
+
+### FATAL
+
+```python
+LogLevel.FATAL = 4
+```
+
+A serious error indicating that the program itself may be unable to continue running. Typically followed by program termination.
+
+**Example use cases:**
+- Critical system resource unavailable
+- Unrecoverable data corruption
+- Fatal configuration errors
+
+## Usage
+
+### Setting Log Level
+
+Configure the log level when initializing Zvec:
+
+```python
+import zvec
+from zvec import LogLevel, LogType
+
+# Set to INFO level (default is WARN)
+zvec.init(
+    log_type=LogType.CONSOLE,
+    log_level=LogLevel.INFO
+)
+```
+
+### Choosing the Right Level
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="code">
+    Use `DEBUG` or `INFO` to see detailed operation logs
+  </Card>
+  <Card title="Production" icon="server">
+    Use `WARN` or `ERROR` to reduce noise and focus on issues
+  </Card>
+</CardGroup>
+
+## Level Filtering
+
+Log messages are filtered based on the configured level:
+
+- Setting `LogLevel.WARN` will show WARN, ERROR, and FATAL messages
+- Setting `LogLevel.ERROR` will show only ERROR and FATAL messages
+- Setting `LogLevel.DEBUG` will show all messages
+
+```python
+# Example: Only show errors and fatal issues
+zvec.init(log_level=LogLevel.ERROR)
+
+# This will suppress INFO and WARN messages
+collection = zvec.create_and_open(...)  # No "Collection opened" message
+```
+
+## Examples
+
+### Debugging Performance Issues
+
+```python
+import zvec
+from zvec import LogLevel, LogType
+
+# Enable debug logging to file
+zvec.init(
+    log_type=LogType.FILE,
+    log_level=LogLevel.DEBUG,
+    log_dir="./logs",
+    log_basename="zvec_debug.log"
+)
+
+# Now all operations will be logged with detailed info
+collection = zvec.create_and_open(...)
+results = collection.query(...)  # Logs query execution details
+```
+
+### Production Configuration
+
+```python
+import zvec
+from zvec import LogLevel, LogType
+
+# Production: Only log warnings and errors
+zvec.init(
+    log_type=LogType.FILE,
+    log_level=LogLevel.WARN,
+    log_dir="/var/log/myapp",
+    log_file_size=4096,  # 4GB per file
+    log_overdue_days=30  # Keep logs for 30 days
+)
+```
+
+## See Also
+
+- [LogType](/api/types/log-type) - Configure log output destination
+- [zvec.init()](/api/init) - Initialize Zvec with logging configuration
+- [Status](/api/types/status) - Error codes and status handling
