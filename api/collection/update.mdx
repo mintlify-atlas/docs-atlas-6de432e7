@@ -1,0 +1,291 @@
+---
+title: "Update Operations"
+description: "Modify existing documents in your Zvec collection"
+---
+
+## update()
+
+Update existing documents by ID. Only the specified fields are modified; other fields remain unchanged.
+
+### Signature
+
+```python
+def update(self, docs: Union[Doc, list[Doc]]) -> Union[Status, list[Status]]
+```
+
+### Parameters
+
+<ParamField path="docs" type="Union[Doc, list[Doc]]" required>
+  One or more documents containing updated fields. Each document must:
+  - Include the ID of an existing document
+  - Contain only the fields you want to update
+  - Match the schema for any fields being updated
+</ParamField>
+
+### Returns
+
+<ResponseField name="Status" type="Union[Status, list[Status]]">
+  - If a single `Doc` is provided: returns a single `Status` object
+  - If a list is provided: returns a `list[Status]` with one status per document
+  
+  Each `Status` indicates success or failure for that document.
+</ResponseField>
+
+### Basic Example
+
+```python
+import zvec
+from zvec import Doc
+
+# Original document
+original = Doc(
+    id="doc_123",
+    vectors={"embedding": [0.1, 0.2, 0.3]},
+    fields={"title": "Old Title", "views": 100, "status": "draft"}
+)
+collection.insert(original)
+
+# Update only specific fields
+update_doc = Doc(
+    id="doc_123",
+    fields={"title": "New Title", "views": 150}  # status remains "draft"
+)
+
+status = collection.update(update_doc)
+if status.ok():
+    print("Document updated successfully")
+```
+
+### Partial Field Updates
+
+<Note>
+  `update()` performs **partial updates**. Only fields included in the `Doc` are modified; omitted fields retain their original values.
+</Note>
+
+```python
+# Update only the vector, leave scalar fields unchanged
+update_doc = Doc(
+    id="doc_123",
+    vectors={"embedding": [0.4, 0.5, 0.6]}  # fields remain unchanged
+)
+collection.update(update_doc)
+
+# Update only scalar fields, leave vectors unchanged
+update_doc = Doc(
+    id="doc_123",
+    fields={"views": 200}  # vectors remain unchanged
+)
+collection.update(update_doc)
+```
+
+### Batch Updates
+
+Update multiple documents efficiently:
+
+```python
+# Update view counts for multiple documents
+updates = [
+    Doc(id=f"doc_{i}", fields={"views": i * 100})
+    for i in range(1, 101)
+]
+
+statuses = collection.update(updates)
+
+# Check results
+success_count = sum(1 for s in statuses if s.ok())
+print(f"Successfully updated {success_count}/{len(updates)} documents")
+```
+
+## upsert()
+
+Insert new documents or update existing ones by ID. This is a convenience method that combines `insert()` and `update()` behavior.
+
+### Signature
+
+```python
+def upsert(self, docs: Union[Doc, list[Doc]]) -> Union[Status, list[Status]]
+```
+
+### Parameters
+
+<ParamField path="docs" type="Union[Doc, list[Doc]]" required>
+  One or more documents to upsert. For each document:
+  - If the ID exists: **replaces** the entire document (like `insert()`)
+  - If the ID doesn't exist: inserts as a new document
+</ParamField>
+
+### Returns
+
+<ResponseField name="Status" type="Union[Status, list[Status]]">
+  Status or list of statuses indicating success/failure for each document.
+</ResponseField>
+
+### Example
+
+```python
+from zvec import Doc
+
+# First upsert (insert)
+doc = Doc(
+    id="user_456",
+    vectors={"profile_emb": [0.1, 0.2, 0.3]},
+    fields={"name": "Alice", "age": 30}
+)
+collection.upsert(doc)
+
+# Second upsert (update - replaces entire document)
+updated_doc = Doc(
+    id="user_456",
+    vectors={"profile_emb": [0.4, 0.5, 0.6]},
+    fields={"name": "Alice Smith", "age": 31, "city": "NYC"}
+)
+collection.upsert(updated_doc)
+```
+
+<Warning>
+  **Key difference**: `upsert()` **replaces** the entire document, while `update()` only modifies specified fields.
+  
+  - Use `update()` for partial updates (e.g., incrementing a counter)
+  - Use `upsert()` when you want to replace the full document or don't know if it exists
+</Warning>
+
+### Comparison: update() vs. upsert()
+
+```python
+# Initial document
+original = Doc(
+    id="doc_1",
+    vectors={"emb": [0.1, 0.2]},
+    fields={"title": "Original", "views": 100, "author": "Alice"}
+)
+collection.insert(original)
+
+# Using update() - partial update
+update_doc = Doc(id="doc_1", fields={"views": 150})
+collection.update(update_doc)
+# Result: {"title": "Original", "views": 150, "author": "Alice"}
+#         ^ title and author preserved
+
+# Using upsert() - full replacement
+upsert_doc = Doc(
+    id="doc_1",
+    vectors={"emb": [0.3, 0.4]},
+    fields={"title": "Updated", "views": 200}
+)
+collection.upsert(upsert_doc)
+# Result: {"title": "Updated", "views": 200}
+#         ^ author field removed!
+```
+
+## Error Handling
+
+### Common Update Errors
+
+```python
+from zvec import StatusCode
+
+status = collection.update(doc)
+
+if not status.ok():
+    if status.code() == StatusCode.NOT_FOUND:
+        print(f"Document {doc.id} does not exist")
+    elif status.code() == StatusCode.INVALID_ARGUMENT:
+        print("Invalid field types or schema mismatch")
+    else:
+        print(f"Error: {status.message()}")
+```
+
+### Handling Batch Update Failures
+
+```python
+updates = [...]  # List of documents to update
+statuses = collection.update(updates)
+
+# Find failed updates
+failed = [
+    (doc, status) for doc, status in zip(updates, statuses) if not status.ok()
+]
+
+if failed:
+    print(f"{len(failed)} updates failed:")
+    for doc, status in failed:
+        print(f"  ID {doc.id}: {status.message()}")
+```
+
+## Updating Vectors
+
+You can update vector embeddings independently of scalar fields:
+
+```python
+import numpy as np
+
+# Re-embed a document with a new model
+new_embedding = embedding_model.encode("Updated text content")
+
+update_doc = Doc(
+    id="doc_123",
+    vectors={"embedding": new_embedding.tolist()}
+)
+
+status = collection.update(update_doc)
+```
+
+<Note>
+  After updating vectors, you may want to call `collection.optimize()` to rebuild indices for better query performance.
+</Note>
+
+## Performance Tips
+
+<Tip>
+  **Batch updates**: Update multiple documents in a single call for better performance.
+</Tip>
+
+```python
+# Good: Batch update
+updates = [Doc(id=f"doc_{i}", fields={"views": i}) for i in range(1000)]
+collection.update(updates)
+
+# Bad: Individual updates
+for i in range(1000):
+    collection.update(Doc(id=f"doc_{i}", fields={"views": i}))
+```
+
+<Tip>
+  **Use update() for partial changes**: Don't use `upsert()` if you only need to modify a few fields.
+</Tip>
+
+```python
+# Good: Partial update
+collection.update(Doc(id="doc_1", fields={"views": 100}))
+
+# Bad: Fetch, modify, upsert entire document
+doc = collection.fetch("doc_1")["doc_1"]
+doc.fields["views"] = 100
+collection.upsert(doc)
+```
+
+## Atomic Operations
+
+<Warning>
+  Individual `update()` and `upsert()` operations are atomic at the document level, but batch operations are **not transactional**.
+  
+  If a batch update fails partway through, some documents may be updated while others are not. Check the returned `Status` list to identify which updates succeeded.
+</Warning>
+
+```python
+updates = [...]  # 100 documents
+statuses = collection.update(updates)
+
+# Some may succeed, others may fail
+for doc, status in zip(updates, statuses):
+    if not status.ok():
+        print(f"Failed to update {doc.id}: {status.message()}")
+        # Implement retry logic if needed
+```
+
+## See Also
+
+- [Insert Operations](/api/collection/insert)
+- [Delete Operations](/api/collection/delete)
+- [Doc Class](/api/schema/collection-schema)
+- [Status & Error Codes](/api/types/status)

@@ -1,0 +1,440 @@
+---
+title: Hybrid Search
+description: Combine dense and sparse vectors for powerful multi-vector retrieval
+---
+
+Hybrid search combines multiple vector types to leverage both semantic similarity (dense vectors) and keyword matching (sparse vectors), providing more robust and accurate search results than either approach alone.
+
+## Why Hybrid Search?
+
+Different vector types excel at different tasks:
+
+| Vector Type | Strengths | Weaknesses |
+|-------------|-----------|------------|
+| **Dense** | Semantic understanding, synonyms, context | Misses exact keywords, domain terms |
+| **Sparse** (BM25) | Exact matching, rare terms, acronyms | No semantic understanding |
+| **Hybrid** | Best of both, robust across query types | Slightly more complex |
+
+### Example Scenario
+
+Query: "Python programming tutorial"
+
+- **Dense only**: Returns documents about snakes, since "python" the animal is common in training data
+- **Sparse only**: Misses "coding guide" (synonym)
+- **Hybrid**: Correctly balances exact "Python" matching with semantic understanding of "programming"
+
+## Setting Up Multi-Vector Collections
+
+<Steps>
+  <Step title="Define Multi-Vector Schema">
+    Create a collection with both dense and sparse vector fields:
+
+    ```python
+    from zvec import CollectionSchema, VectorSchema, FieldSchema, DataType
+    from zvec import HnswIndexParam
+
+    schema = CollectionSchema(
+        name="hybrid_docs",
+        fields=[
+            FieldSchema("id", DataType.INT64),
+            FieldSchema("title", DataType.STRING),
+            FieldSchema("content", DataType.STRING)
+        ],
+        vectors=[
+            # Dense semantic embedding
+            VectorSchema(
+                name="dense_emb",
+                data_type=DataType.VECTOR_FP32,
+                dimension=768,
+                index_param=HnswIndexParam(ef_construction=200, m=16)
+            ),
+            # Sparse keyword embedding
+            VectorSchema(
+                name="sparse_emb",
+                data_type=DataType.SPARSE_VECTOR_FP32,
+                index_param=HnswIndexParam(ef_construction=100, m=8)
+            )
+        ]
+    )
+    ```
+  </Step>
+
+  <Step title="Initialize Collection">
+    ```python
+    import zvec
+
+    zvec.init()
+    collection = zvec.create_and_open(
+        path="./hybrid_collection",
+        schema=schema
+    )
+    ```
+  </Step>
+
+  <Step title="Prepare Embedding Functions">
+    Set up both dense and sparse embedding generators:
+
+    ```python
+    from zvec.extension import DefaultLocalDenseEmbedding, BM25EmbeddingFunction
+
+    # Dense embeddings for semantic search
+    dense_fn = DefaultLocalDenseEmbedding()
+
+    # Sparse embeddings for keyword search
+    sparse_fn = BM25EmbeddingFunction(
+        language="en",
+        encoding_type="document"
+    )
+    ```
+  </Step>
+
+  <Step title="Index Documents with Both Vectors">
+    ```python
+    from zvec import Doc
+
+    documents = [
+        "Python is a high-level programming language",
+        "Machine learning algorithms in Python",
+        "JavaScript web development tutorial"
+    ]
+
+    docs = []
+    for i, text in enumerate(documents):
+        doc = Doc(
+            id=f"doc_{i}",
+            fields={
+                "id": i,
+                "title": f"Document {i}",
+                "content": text
+            },
+            vectors={
+                "dense_emb": dense_fn.embed(text),
+                "sparse_emb": sparse_fn.embed(text)
+            }
+        )
+        docs.append(doc)
+
+    collection.insert(docs)
+    ```
+  </Step>
+</Steps>
+
+## Multi-Vector Query Strategies
+
+Zvec provides two reranking strategies to combine results from multiple vector fields:
+
+### Reciprocal Rank Fusion (RRF)
+
+RRF combines results based on their ranks without relying on scores. It's robust to different score scales:
+
+```python
+from zvec import VectorQuery
+from zvec.extension import RrfReRanker
+
+# Generate query vectors
+query_text = "Python programming guide"
+query_sparse_fn = BM25EmbeddingFunction(language="en", encoding_type="query")
+
+query_dense = dense_fn.embed(query_text)
+query_sparse = query_sparse_fn.embed(query_text)
+
+# Define multi-vector query
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="dense_emb", vector=query_dense),
+        VectorQuery(field_name="sparse_emb", vector=query_sparse)
+    ],
+    reranker=RrfReRanker(
+        topn=10,
+        rank_constant=60  # Smoothing parameter
+    )
+)
+
+for doc in results:
+    print(f"{doc.id}: {doc.field('content')}")
+    print(f"RRF Score: {doc.score:.4f}\n")
+```
+
+#### How RRF Works
+
+RRF score for document at rank `r`: `1 / (k + r + 1)`
+
+```python
+# Document appears at rank 2 in dense search, rank 5 in sparse search
+# k = 60 (rank_constant)
+score_dense = 1 / (60 + 2 + 1) = 0.0159
+score_sparse = 1 / (60 + 5 + 1) = 0.0152
+total_score = 0.0159 + 0.0152 = 0.0311
+```
+
+<Tip>
+  **RRF Advantages:**
+  - No score calibration needed
+  - Robust to different distance metrics
+  - Gives more weight to documents appearing in multiple result sets
+  - Default `rank_constant=60` works well for most cases
+</Tip>
+
+### Weighted Score Fusion
+
+Weight different vector fields based on their importance:
+
+```python
+from zvec.extension import WeightedReRanker
+from zvec import MetricType
+
+# Define weights for each field
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="dense_emb", vector=query_dense),
+        VectorQuery(field_name="sparse_emb", vector=query_sparse)
+    ],
+    reranker=WeightedReRanker(
+        topn=10,
+        weights={
+            "dense_emb": 0.7,    # 70% weight to semantic
+            "sparse_emb": 0.3    # 30% weight to keywords
+        },
+        metric=MetricType.IP  # Score normalization method
+    )
+)
+```
+
+#### Score Normalization
+
+Weighted reranker normalizes scores to [0, 1] before combining:
+
+```python
+# Normalization formulas by metric type
+if metric == MetricType.L2:
+    normalized = 1.0 - 2 * arctan(score) / π
+
+elif metric == MetricType.IP:
+    normalized = 0.5 + arctan(score) / π
+
+elif metric == MetricType.COSINE:
+    normalized = 1.0 - score / 2.0
+```
+
+<Warning>
+  Ensure the `metric` parameter matches the metric used in your vector index. Mismatched metrics will produce incorrect score normalization.
+</Warning>
+
+## Tuning Weight Parameters
+
+<Steps>
+  <Step title="Start with Balanced Weights">
+    ```python
+    weights = {
+        "dense_emb": 0.5,
+        "sparse_emb": 0.5
+    }
+    ```
+  </Step>
+
+  <Step title="Adjust Based on Query Type">
+    Different queries benefit from different balances:
+
+    ```python
+    # For semantic queries ("concepts similar to X")
+    semantic_weights = {"dense_emb": 0.8, "sparse_emb": 0.2}
+
+    # For exact match queries ("find document with code ABC123")
+    exact_weights = {"dense_emb": 0.2, "sparse_emb": 0.8}
+
+    # General purpose
+    balanced_weights = {"dense_emb": 0.6, "sparse_emb": 0.4}
+    ```
+  </Step>
+
+  <Step title="Evaluate with Your Data">
+    Test different weight combinations:
+
+    ```python
+    from zvec.extension import WeightedReRanker
+
+    weight_configs = [
+        {"dense_emb": 0.5, "sparse_emb": 0.5},
+        {"dense_emb": 0.6, "sparse_emb": 0.4},
+        {"dense_emb": 0.7, "sparse_emb": 0.3},
+    ]
+
+    for weights in weight_configs:
+        reranker = WeightedReRanker(topn=10, weights=weights)
+        results = collection.query(vectors=queries, reranker=reranker)
+        # Evaluate results against ground truth
+    ```
+  </Step>
+</Steps>
+
+## Advanced Patterns
+
+### Three-Vector Hybrid Search
+
+Combine multiple dense models or add specialized vectors:
+
+```python
+schema = CollectionSchema(
+    name="advanced_hybrid",
+    fields=[FieldSchema("id", DataType.INT64)],
+    vectors=[
+        VectorSchema("text_dense", DataType.VECTOR_FP32, dimension=768),
+        VectorSchema("code_dense", DataType.VECTOR_FP32, dimension=512),
+        VectorSchema("keyword_sparse", DataType.SPARSE_VECTOR_FP32)
+    ]
+)
+
+# Query all three fields
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_dense", vector=text_vec),
+        VectorQuery(field_name="code_dense", vector=code_vec),
+        VectorQuery(field_name="keyword_sparse", vector=sparse_vec)
+    ],
+    reranker=WeightedReRanker(
+        topn=10,
+        weights={
+            "text_dense": 0.4,
+            "code_dense": 0.4,
+            "keyword_sparse": 0.2
+        }
+    )
+)
+```
+
+### Conditional Reranking
+
+Choose reranking strategy based on query characteristics:
+
+```python
+def hybrid_search(query_text, is_semantic_query=True):
+    """Adaptive hybrid search"""
+    query_dense = dense_fn.embed(query_text)
+    query_sparse = sparse_fn.embed(query_text)
+    
+    vectors = [
+        VectorQuery(field_name="dense_emb", vector=query_dense),
+        VectorQuery(field_name="sparse_emb", vector=query_sparse)
+    ]
+    
+    if is_semantic_query:
+        # Semantic: favor dense vectors
+        reranker = WeightedReRanker(
+            topn=10,
+            weights={"dense_emb": 0.8, "sparse_emb": 0.2}
+        )
+    else:
+        # Keyword: use RRF for balanced fusion
+        reranker = RrfReRanker(topn=10)
+    
+    return collection.query(vectors=vectors, reranker=reranker)
+```
+
+### Filtering with Hybrid Search
+
+Combine multi-vector search with metadata filters:
+
+```python
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="dense_emb", vector=query_dense),
+        VectorQuery(field_name="sparse_emb", vector=query_sparse)
+    ],
+    filter="id > 100 and id < 500",  # Pre-filter candidates
+    reranker=RrfReRanker(topn=10)
+)
+```
+
+## Performance Optimization
+
+<Steps>
+  <Step title="Index Both Fields Properly">
+    Use appropriate index parameters for each vector type:
+
+    ```python
+    vectors=[
+        # Dense: higher quality index
+        VectorSchema(
+            "dense",
+            DataType.VECTOR_FP32,
+            dimension=768,
+            index_param=HnswIndexParam(ef_construction=200, m=16)
+        ),
+        # Sparse: lower parameters (fewer non-zero dims)
+        VectorSchema(
+            "sparse",
+            DataType.SPARSE_VECTOR_FP32,
+            index_param=HnswIndexParam(ef_construction=100, m=8)
+        )
+    ]
+    ```
+  </Step>
+
+  <Step title="Adjust topn Wisely">
+    Balance quality and speed:
+
+    ```python
+    # Fast: retrieve few candidates from each field
+    reranker = RrfReRanker(topn=10)
+
+    # Thorough: retrieve more for better fusion
+    reranker = RrfReRanker(topn=100)
+    ```
+  </Step>
+
+  <Step title="Cache Embeddings">
+    ```python
+    # Cache query embeddings for repeated searches
+    query_cache = {}
+
+    def get_embeddings(text):
+        if text not in query_cache:
+            query_cache[text] = {
+                "dense": dense_fn.embed(text),
+                "sparse": sparse_fn.embed(text)
+            }
+        return query_cache[text]
+    ```
+  </Step>
+</Steps>
+
+## Comparison: RRF vs Weighted
+
+| Criterion | RRF | Weighted |
+|-----------|-----|----------|
+| **Setup** | Simple, no tuning | Requires weight tuning |
+| **Score Scale** | Handles any metric | Needs correct metric |
+| **Control** | Limited (rank_constant only) | Fine-grained (per-field weights) |
+| **Best For** | Quick setup, robust defaults | Production systems, domain-specific |
+
+<Tip>
+  **Quick Decision Guide:**
+  - Starting out? Use **RRF** with defaults
+  - Have evaluation data? Tune **Weighted** for optimal results
+  - Mixing dense+sparse? Both work well
+  - 3+ vector fields? **RRF** is simpler
+</Tip>
+
+## Common Pitfalls
+
+<Warning>
+  **Don't:**
+  - Mix embedding models between index and query time
+  - Use the same `encoding_type` for documents and queries in BM25
+  - Set all weights to 0
+  - Forget to normalize dense vectors if using cosine similarity
+
+  **Do:**
+  - Keep embedding models consistent
+  - Use `encoding_type="document"` for indexing, `"query"` for search
+  - Validate weights sum to 1.0 (or close)
+  - Test hybrid search against single-vector baselines
+</Warning>
+
+## Next Steps
+
+- Understand [Dense Vectors](/guides/dense-vectors) in depth
+- Learn about [Sparse Vectors](/guides/sparse-vectors) and BM25
+- Add [Filtering](/guides/filtering) to hybrid queries
+- Optimize with [Performance Tuning](/guides/performance-tuning)
+- Explore [Embedding Functions](/guides/embeddings) for more options

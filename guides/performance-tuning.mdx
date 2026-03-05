@@ -1,0 +1,693 @@
+---
+title: Performance Tuning
+description: Optimize Zvec for speed, memory efficiency, and query accuracy
+---
+
+Zvec provides extensive configuration options to tune performance for your specific workload. This guide covers memory management, thread configuration, index tuning, and query optimization.
+
+## Initialization Configuration
+
+Configure Zvec before any operations:
+
+```python
+import zvec
+from zvec import LogLevel, LogType
+
+zvec.init(
+    # Resource limits
+    memory_limit_mb=4096,        # 4GB memory limit
+    query_threads=8,             # Parallel query threads
+    optimize_threads=4,          # Background optimization threads
+    
+    # Query heuristics
+    invert_to_forward_scan_ratio=0.9,
+    brute_force_by_keys_ratio=0.1,
+    
+    # Logging
+    log_type=LogType.FILE,
+    log_level=LogLevel.WARN,
+    log_dir="./logs"
+)
+```
+
+<Warning>
+  `zvec.init()` must be called before creating or opening collections, and can only be called once per process.
+</Warning>
+
+## Memory Configuration
+
+### Memory Limit
+
+Set a soft memory cap to prevent OOM errors:
+
+```python
+zvec.init(
+    memory_limit_mb=2048  # 2GB limit
+)
+```
+
+**Guidelines:**
+
+| Collection Size | Recommended Memory |
+|----------------|--------------------|
+| < 100K vectors | 512 MB |
+| 100K - 1M vectors | 1-2 GB |
+| 1M - 10M vectors | 4-8 GB |
+| 10M+ vectors | 16+ GB |
+
+<Steps>
+  <Step title="Estimate Memory Needs">
+    Calculate approximate memory requirements:
+
+    ```python
+    # Formula:
+    # memory_mb = (num_docs * vector_dim * 4 bytes) / (1024 * 1024)
+    #             + (num_docs * scalar_fields * 8 bytes) / (1024 * 1024)
+    #             + index_overhead
+
+    num_docs = 1_000_000
+    vector_dim = 768
+    scalar_fields = 5
+
+    # Vector data
+    vector_mb = (num_docs * vector_dim * 4) / (1024 * 1024)
+    
+    # Scalar data
+    scalar_mb = (num_docs * scalar_fields * 8) / (1024 * 1024)
+    
+    # HNSW index overhead (approximately 30-50%)
+    index_overhead = (vector_mb + scalar_mb) * 0.4
+    
+    total_mb = vector_mb + scalar_mb + index_overhead
+    print(f"Estimated memory: {total_mb:.0f} MB")
+    # Estimated memory: 4096 MB
+    
+    # Add 20% buffer
+    recommended = total_mb * 1.2
+    zvec.init(memory_limit_mb=int(recommended))
+    ```
+  </Step>
+
+  <Step title="Monitor Memory Usage">
+    ```python
+    stats = collection.stats
+    print(f"Documents: {stats.doc_count}")
+    # Check system memory usage externally
+    ```
+  </Step>
+
+  <Step title="Set Container Limits">
+    In Docker/Kubernetes, Zvec auto-detects cgroup limits:
+
+    ```yaml
+    # docker-compose.yml
+    services:
+      zvec-app:
+        image: my-zvec-app
+        deploy:
+          resources:
+            limits:
+              memory: 4G  # Zvec detects this automatically
+    ```
+
+    Or set explicitly:
+
+    ```python
+    # Override auto-detection
+    zvec.init(memory_limit_mb=3200)  # 80% of 4GB
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  If `memory_limit_mb=None`, Zvec uses 80% of cgroup memory limit in containers, or uses available system memory otherwise.
+</Tip>
+
+## Thread Configuration
+
+### Query Threads
+
+Control parallelism for query operations:
+
+```python
+zvec.init(
+    query_threads=8  # Use 8 threads for queries
+)
+```
+
+**Guidelines:**
+
+- **Default (None)**: Auto-detects available CPU cores
+- **CPU-bound workloads**: Set to number of physical cores
+- **Mixed workloads**: Set to 2x physical cores
+- **Memory-constrained**: Reduce threads to lower memory usage
+
+```python
+import os
+
+# Get CPU count
+cpu_count = os.cpu_count()
+
+# Conservative: physical cores
+zvec.init(query_threads=cpu_count // 2)
+
+# Aggressive: use all logical cores
+zvec.init(query_threads=cpu_count)
+```
+
+### Optimize Threads
+
+Background threads for indexing and compaction:
+
+```python
+zvec.init(
+    optimize_threads=4  # 4 background threads
+)
+```
+
+**Guidelines:**
+
+- **Heavy inserts**: Increase optimize threads (4-8)
+- **Query-heavy**: Reduce optimize threads (1-2)
+- **Default**: Same as query_threads
+
+<Steps>
+  <Step title="Balanced Configuration">
+    ```python
+    # General purpose
+    zvec.init(
+        query_threads=8,
+        optimize_threads=4
+    )
+    ```
+  </Step>
+
+  <Step title="Insert-Heavy Workload">
+    ```python
+    # Optimize for bulk inserts
+    zvec.init(
+        query_threads=4,      # Fewer query threads
+        optimize_threads=8    # More background indexing
+    )
+    ```
+  </Step>
+
+  <Step title="Query-Heavy Workload">
+    ```python
+    # Optimize for queries
+    zvec.init(
+        query_threads=16,     # Max query parallelism
+        optimize_threads=2    # Minimal background work
+    )
+    ```
+  </Step>
+</Steps>
+
+## Index Tuning
+
+### HNSW Parameters
+
+HNSW is the default index type, balancing speed and accuracy:
+
+```python
+from zvec import VectorSchema, DataType, HnswIndexParam
+
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768,
+    index_param=HnswIndexParam(
+        ef_construction=200,  # Build quality
+        m=16                  # Connectivity
+    )
+)
+```
+
+#### Parameter Guide
+
+**ef_construction** (default: 100)
+
+- Controls index build quality
+- Higher = better recall, slower build, more memory
+- Range: 100-400
+
+```python
+# Fast build, good recall
+HnswIndexParam(ef_construction=100)
+
+# Balanced (recommended)
+HnswIndexParam(ef_construction=200)
+
+# High quality, slow build
+HnswIndexParam(ef_construction=400)
+```
+
+**m** (default: 16)
+
+- Number of connections per node
+- Higher = better recall, more memory
+- Range: 8-32
+
+```python
+# Memory-efficient
+HnswIndexParam(m=8)
+
+# Balanced (recommended)
+HnswIndexParam(m=16)
+
+# High recall
+HnswIndexParam(m=32)
+```
+
+| Use Case | ef_construction | m | Trade-off |
+|----------|----------------|---|------------|
+| Development | 100 | 8 | Fast, lower quality |
+| Production (balanced) | 200 | 16 | Good balance |
+| High accuracy | 400 | 32 | Best recall, slow |
+| Memory-constrained | 100 | 8 | Minimal memory |
+
+### IVF Parameters
+
+For very large collections (millions of vectors):
+
+```python
+from zvec import IVFIndexParam
+
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768,
+    index_param=IVFIndexParam(
+        nlist=1000  # Number of clusters
+    )
+)
+```
+
+**nlist Guidelines:**
+
+```python
+# Formula: nlist = sqrt(num_vectors)
+import math
+
+num_vectors = 1_000_000
+nlist = int(math.sqrt(num_vectors))  # 1000
+
+IVFIndexParam(nlist=nlist)
+```
+
+| Collection Size | nlist |
+|-----------------|-------|
+| 100K vectors | 316 |
+| 1M vectors | 1000 |
+| 10M vectors | 3162 |
+
+### Flat Index
+
+Exact search, no approximation:
+
+```python
+from zvec import FlatIndexParam
+
+# Guaranteed exact results
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768,
+    index_param=FlatIndexParam()
+)
+```
+
+<Tip>
+  Use Flat index for:
+  - Small collections (< 10K vectors)
+  - When exact recall is critical
+  - Benchmarking other index types
+</Tip>
+
+## Query Optimization
+
+### Query-Time Parameters
+
+#### HNSW Query Parameter
+
+```python
+from zvec import VectorQuery, HnswQueryParam
+
+results = collection.query(
+    VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(
+            ef=200  # Search quality
+        )
+    ),
+    topk=10
+)
+```
+
+**ef (search parameter)**:
+
+- Controls search quality vs speed
+- Must be >= topk
+- Default: 50
+
+```python
+# Fast, lower recall
+HnswQueryParam(ef=50)
+
+# Balanced
+HnswQueryParam(ef=200)
+
+# High recall, slower
+HnswQueryParam(ef=500)
+```
+
+#### IVF Query Parameter
+
+```python
+from zvec import IVFQueryParam
+
+results = collection.query(
+    VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=IVFQueryParam(
+            nprobe=10  # Clusters to search
+        )
+    ),
+    topk=10
+)
+```
+
+**nprobe**:
+
+- Number of clusters to search
+- Higher = better recall, slower
+- Default: 10
+
+```python
+# Fast, lower recall
+IVFQueryParam(nprobe=5)
+
+# Balanced
+IVFQueryParam(nprobe=10)
+
+# High recall
+IVFQueryParam(nprobe=50)
+```
+
+### Filter Optimization
+
+Optimize filtered queries:
+
+<Steps>
+  <Step title="Enable Range Optimization">
+    For numeric range filters:
+
+    ```python
+    from zvec import FieldSchema, InvertIndexParam
+
+    FieldSchema(
+        "timestamp",
+        DataType.INT64,
+        index_param=InvertIndexParam(
+            enable_range_optimization=True  # Speed up range queries
+        )
+    )
+    ```
+  </Step>
+
+  <Step title="Use Selective Filters">
+    ```python
+    # Good: Filters 90% of documents (selective)
+    filter="category = 'rare_item'"
+
+    # Avoid: Matches 90% of documents (non-selective)
+    filter="category != 'rare_item'"
+    ```
+  </Step>
+
+  <Step title="Combine Filters Efficiently">
+    ```python
+    # Good: Most selective filter first
+    filter="rare_category = 'X' and price > 100"
+
+    # Order doesn't matter, but clarity helps
+    ```
+  </Step>
+</Steps>
+
+## Query Heuristics
+
+Advanced tuning for query execution:
+
+```python
+zvec.init(
+    invert_to_forward_scan_ratio=0.9,
+    brute_force_by_keys_ratio=0.1
+)
+```
+
+### invert_to_forward_scan_ratio
+
+Threshold to switch from inverted index to full scan:
+
+- Range: 0.0 - 1.0
+- Higher = more aggressive index skipping
+- Default: 0.9
+
+```python
+# Conservative: use index more often
+zvec.init(invert_to_forward_scan_ratio=0.7)
+
+# Aggressive: skip index for non-selective filters
+zvec.init(invert_to_forward_scan_ratio=0.95)
+```
+
+### brute_force_by_keys_ratio
+
+Threshold to use brute-force key lookup:
+
+- Range: 0.0 - 1.0
+- Lower = prefer index
+- Default: 0.1
+
+```python
+# Prefer index
+zvec.init(brute_force_by_keys_ratio=0.05)
+
+# Prefer brute force for small result sets
+zvec.init(brute_force_by_keys_ratio=0.2)
+```
+
+<Tip>
+  Default values work well for most cases. Only adjust if profiling shows specific bottlenecks.
+</Tip>
+
+## Batch Operations
+
+Optimize bulk inserts and queries:
+
+### Batch Insert
+
+```python
+from zvec import Doc
+
+# Optimal batch size: 100-1000 documents
+batch_size = 500
+
+for i in range(0, len(all_docs), batch_size):
+    batch = all_docs[i:i + batch_size]
+    results = collection.insert(batch)
+    
+    # Check results
+    assert all(r.ok() for r in results)
+
+print(f"Inserted {len(all_docs)} documents")
+```
+
+### Optimize After Bulk Insert
+
+```python
+from zvec import OptimizeOption
+
+# Insert large batch
+collection.insert(large_batch)
+
+# Trigger optimization
+collection.optimize(option=OptimizeOption())
+
+# Check index completeness
+stats = collection.stats
+print(f"Index completeness: {stats.index_completeness}")
+```
+
+## Monitoring and Profiling
+
+### Collection Statistics
+
+```python
+stats = collection.stats
+
+print(f"Document count: {stats.doc_count}")
+print(f"Index completeness: {stats.index_completeness}")
+# {'dense': 1.0, 'sparse': 1.0}
+```
+
+### Query Performance
+
+```python
+import time
+
+start = time.time()
+results = collection.query(
+    VectorQuery(field_name="embedding", vector=query_vec),
+    topk=10
+)
+query_time = time.time() - start
+
+print(f"Query time: {query_time*1000:.2f}ms")
+print(f"Results: {len(results)}")
+```
+
+### Logging Configuration
+
+```python
+from zvec import LogType, LogLevel
+
+zvec.init(
+    log_type=LogType.FILE,
+    log_level=LogLevel.DEBUG,  # DEBUG, INFO, WARN, ERROR, FATAL
+    log_dir="./logs",
+    log_basename="zvec.log",
+    log_file_size=2048,        # MB per file
+    log_overdue_days=7         # Retention period
+)
+```
+
+## Common Performance Patterns
+
+### High-Throughput Ingest
+
+```python
+# Configuration for bulk loading
+zvec.init(
+    memory_limit_mb=8192,
+    query_threads=4,
+    optimize_threads=8  # More background threads
+)
+
+# Use large batches
+batch_size = 1000
+
+# Optimize periodically
+for i in range(0, len(all_docs), batch_size * 10):
+    # Insert 10 batches
+    for j in range(10):
+        batch = all_docs[i + j*batch_size : i + (j+1)*batch_size]
+        collection.insert(batch)
+    
+    # Optimize every 10k docs
+    collection.optimize()
+```
+
+### Low-Latency Queries
+
+```python
+# Configuration for fast queries
+zvec.init(
+    memory_limit_mb=16384,  # Large memory
+    query_threads=16,       # Max parallelism
+    optimize_threads=2
+)
+
+# Use aggressive HNSW build
+HnswIndexParam(
+    ef_construction=400,
+    m=32
+)
+
+# Moderate query parameters
+HnswQueryParam(ef=100)
+```
+
+### Memory-Constrained
+
+```python
+# Configuration for limited memory
+zvec.init(
+    memory_limit_mb=1024,
+    query_threads=2,
+    optimize_threads=1
+)
+
+# Use minimal HNSW parameters
+HnswIndexParam(
+    ef_construction=100,
+    m=8
+)
+
+# Small batch sizes
+batch_size = 100
+```
+
+## Troubleshooting
+
+### Slow Queries
+
+<Steps>
+  <Step title="Check Index Parameters">
+    ```python
+    # Query time parameter too high?
+    HnswQueryParam(ef=50)  # Instead of 500
+    ```
+  </Step>
+
+  <Step title="Verify Index Built">
+    ```python
+    stats = collection.stats
+    print(stats.index_completeness)
+    # Should be 1.0 for all fields
+    ```
+  </Step>
+
+  <Step title="Optimize Collection">
+    ```python
+    collection.optimize()
+    ```
+  </Step>
+</Steps>
+
+### High Memory Usage
+
+<Steps>
+  <Step title="Reduce Index Parameters">
+    ```python
+    # Lower m and ef_construction
+    HnswIndexParam(ef_construction=100, m=8)
+    ```
+  </Step>
+
+  <Step title="Use INT8 Quantization">
+    ```python
+    VectorSchema("emb", DataType.VECTOR_INT8, dimension=768)
+    # 4x memory savings
+    ```
+  </Step>
+
+  <Step title="Limit Thread Count">
+    ```python
+    zvec.init(
+        query_threads=4,
+        optimize_threads=2
+    )
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+- Understand [Dense Vectors](/guides/dense-vectors) and [Sparse Vectors](/guides/sparse-vectors)
+- Implement [Hybrid Search](/guides/hybrid-search) for best results
+- Add [Filtering](/guides/filtering) for precise queries
+- Explore [Embedding Functions](/guides/embeddings)

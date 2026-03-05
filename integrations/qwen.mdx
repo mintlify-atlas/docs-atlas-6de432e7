@@ -1,0 +1,340 @@
+---
+title: Qwen (DashScope)
+description: Use Alibaba Cloud's Qwen models with Zvec for embeddings and reranking
+---
+
+## Overview
+
+Zvec provides integration with Alibaba Cloud's DashScope service and Qwen models for:
+
+- **Dense embeddings**: `QwenDenseEmbedding` - Semantic text embeddings
+- **Sparse embeddings**: `QwenSparseEmbedding` - Keyword-weighted vectors for lexical matching
+- **Reranking**: `QwenReRanker` - Cross-encoder based semantic reranking
+
+## Installation
+
+```bash
+pip install dashscope
+```
+
+## Authentication
+
+Set your DashScope API key as an environment variable:
+
+```bash
+export DASHSCOPE_API_KEY="your-api-key"
+```
+
+Alternatively, pass the API key directly to the constructor:
+
+```python
+emb_func = QwenDenseEmbedding(dimension=1024, api_key="your-api-key")
+```
+
+Obtain your API key from [DashScope Console](https://dashscope.console.aliyun.com/).
+
+## Dense Embeddings
+
+### Basic Usage
+
+```python
+from zvec.extension import QwenDenseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+# Initialize with desired dimension
+emb_func = QwenDenseEmbedding(dimension=1024)
+vector = emb_func.embed("Hello, world!")
+
+print(f"Dimension: {len(vector)}")
+# Output: Dimension: 1024
+```
+
+### Model Selection
+
+```python
+# Using specific model
+emb_func = QwenDenseEmbedding(
+    dimension=512,
+    model="text-embedding-v3",
+    api_key="your-api-key"
+)
+
+vector = emb_func.embed("Machine learning is fascinating")
+```
+
+Available models:
+- `text-embedding-v4` (default)
+- `text-embedding-v3`
+- `text-embedding-v2`
+- `text-embedding-v1`
+
+### Asymmetric Retrieval
+
+Optimize embeddings for query-document matching:
+
+```python
+# For search queries
+query_emb = QwenDenseEmbedding(
+    dimension=1024,
+    text_type="query"
+)
+query_vector = query_emb.embed("What is machine learning?")
+
+# For document embeddings
+doc_emb = QwenDenseEmbedding(
+    dimension=1024,
+    text_type="document"
+)
+doc_vector = doc_emb.embed(
+    "Machine learning is a subset of artificial intelligence..."
+)
+```
+
+## Sparse Embeddings
+
+### Basic Usage
+
+Sparse embeddings are ideal for keyword-based search and hybrid retrieval:
+
+```python
+from zvec.extension import QwenSparseEmbedding
+
+# For query embedding
+query_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="query"
+)
+query_vec = query_emb.embed("machine learning")
+
+print(f"Type: {type(query_vec)}")
+print(f"Non-zero dimensions: {len(query_vec)}")
+# Output: Type: <class 'dict'>
+# Output: Non-zero dimensions: 156
+```
+
+### Asymmetric Sparse Retrieval
+
+```python
+# Query embedding
+query_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="query"
+)
+query_vec = query_emb.embed("what causes aging fast")
+
+# Document embedding
+doc_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="document"
+)
+doc_vec = doc_emb.embed(
+    "UV-A light causes tanning, skin aging, and cataracts..."
+)
+
+# Calculate similarity (dot product)
+similarity = sum(
+    query_vec.get(k, 0) * doc_vec.get(k, 0)
+    for k in set(query_vec) | set(doc_vec)
+)
+```
+
+### Hybrid Retrieval
+
+Combine dense and sparse embeddings for best retrieval performance:
+
+```python
+from zvec.extension import QwenDenseEmbedding, QwenSparseEmbedding
+
+dense_emb = QwenDenseEmbedding(dimension=1024)
+sparse_emb = QwenSparseEmbedding(dimension=1024)
+
+query = "deep learning neural networks"
+dense_vec = dense_emb.embed(query)   # [0.1, -0.3, 0.5, ...]
+sparse_vec = sparse_emb.embed(query) # {12: 0.8, 45: 1.2, ...}
+```
+
+## Reranking
+
+### Basic Usage
+
+```python
+from zvec.extension import QwenReRanker
+from zvec import Collection
+
+# Initialize reranker
+reranker = QwenReRanker(
+    query="machine learning algorithms",
+    topn=5,
+    rerank_field="content",
+    model="gte-rerank-v2",
+    api_key="your-api-key"
+)
+
+# Use in collection query
+results = collection.query(
+    data={"vector": [query_vector]},
+    reranker=reranker,
+    topk=20  # Retrieve 20, rerank to top 5
+)
+```
+
+### Configuration Options
+
+```python
+reranker = QwenReRanker(
+    query="What is machine learning?",  # Required
+    topn=10,                             # Number of results to return
+    rerank_field="content",              # Document field to rerank
+    model="gte-rerank-v2",              # Rerank model
+    api_key="your-api-key"               # API key
+)
+```
+
+## Using with Zvec Collections
+
+### Dense Embeddings
+
+```python
+from zvec import Collection, DataType
+from zvec.extension import QwenDenseEmbedding
+
+emb_func = QwenDenseEmbedding(dimension=1024)
+
+collection = Collection(name="documents")
+collection.create_field("id", DataType.INT64, is_primary=True)
+collection.create_field("text", DataType.VARCHAR, max_length=512)
+collection.create_field(
+    name="vector",
+    dtype=DataType.VECTOR_FP32,
+    dimension=1024,
+    embedding_function=emb_func
+)
+collection.create()
+
+# Insert data - embeddings generated automatically
+collection.insert([
+    {"id": 1, "text": "Introduction to machine learning"},
+    {"id": 2, "text": "Deep learning with neural networks"}
+])
+
+# Query with automatic embedding
+results = collection.query(
+    data={"vector": ["machine learning algorithms"]},
+    output_fields=["id", "text"],
+    topk=2
+)
+```
+
+### Sparse Embeddings
+
+```python
+from zvec import Collection, DataType
+from zvec.extension import QwenSparseEmbedding
+
+sparse_func = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="document"
+)
+
+collection = Collection(name="documents")
+collection.create_field("id", DataType.INT64, is_primary=True)
+collection.create_field("text", DataType.VARCHAR, max_length=512)
+collection.create_field(
+    name="sparse_vector",
+    dtype=DataType.VECTOR_SPARSE_FP32,
+    dimension=1024,
+    embedding_function=sparse_func
+)
+collection.create()
+```
+
+## Error Handling
+
+```python
+try:
+    emb_func = QwenDenseEmbedding(dimension=1024)
+    emb_func.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Output: Error: Input text cannot be empty or whitespace only
+
+try:
+    emb_func.embed(123)  # Non-string input
+except TypeError as e:
+    print(f"Error: {e}")
+    # Output: Error: Expected 'input' to be str, got int
+```
+
+## QwenDenseEmbedding Configuration
+
+<ParamField path="dimension" type="int" required>
+  Desired output embedding dimension (e.g., 512, 1024, 1536)
+</ParamField>
+
+<ParamField path="model" type="string" default="text-embedding-v4">
+  DashScope embedding model identifier
+</ParamField>
+
+<ParamField path="api_key" type="string" default="None">
+  DashScope API authentication key. If `None`, reads from `DASHSCOPE_API_KEY` environment variable
+</ParamField>
+
+<ParamField path="text_type" type="string" default="None">
+  Text role for asymmetric retrieval: `"query"` or `"document"`
+</ParamField>
+
+## QwenSparseEmbedding Configuration
+
+<ParamField path="dimension" type="int" required>
+  Desired output embedding dimension
+</ParamField>
+
+<ParamField path="model" type="string" default="text-embedding-v4">
+  DashScope embedding model identifier
+</ParamField>
+
+<ParamField path="api_key" type="string" default="None">
+  DashScope API authentication key
+</ParamField>
+
+<ParamField path="encoding_type" type="string" default="query">
+  Encoding type: `"query"` or `"document"`
+</ParamField>
+
+## QwenReRanker Configuration
+
+<ParamField path="query" type="string" required>
+  Query text for semantic re-ranking
+</ParamField>
+
+<ParamField path="topn" type="int" default="10">
+  Maximum number of documents to return after re-ranking
+</ParamField>
+
+<ParamField path="rerank_field" type="string" required>
+  Document field name to use as re-ranking input text
+</ParamField>
+
+<ParamField path="model" type="string" default="gte-rerank-v2">
+  DashScope re-ranking model identifier
+</ParamField>
+
+<ParamField path="api_key" type="string" default="None">
+  DashScope API authentication key
+</ParamField>
+
+## Notes
+
+- Results are cached (LRU cache, maxsize=10) to reduce API calls
+- API usage may incur costs based on your DashScope subscription plan
+- Network connectivity to DashScope API endpoints is required
+- Sparse vectors store only non-zero dimensions for efficiency
+- For detailed API specifications, see [DashScope Documentation](https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api)
+
+## See Also
+
+- [OpenAIDenseEmbedding](/integrations/openai) - Alternative using OpenAI API
+- [DefaultLocalDenseEmbedding](/integrations/sentence-transformers) - Local embeddings without API calls
+- [BM25EmbeddingFunction](/integrations/bm25) - BM25-based sparse embeddings

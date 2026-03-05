@@ -1,0 +1,171 @@
+---
+title: 'init'
+description: 'Initialize Zvec with configuration options'
+---
+
+## Function signature
+
+```python
+zvec.init(
+    *,
+    log_type: Optional[LogType] = LogType.CONSOLE,
+    log_level: Optional[LogLevel] = LogLevel.WARN,
+    log_dir: Optional[str] = "./logs",
+    log_basename: Optional[str] = "zvec.log",
+    log_file_size: Optional[int] = 2048,
+    log_overdue_days: Optional[int] = 7,
+    query_threads: Optional[int] = None,
+    optimize_threads: Optional[int] = None,
+    invert_to_forward_scan_ratio: Optional[float] = None,
+    brute_force_by_keys_ratio: Optional[float] = None,
+    memory_limit_mb: Optional[int] = None,
+) -> None
+```
+
+Initialize Zvec with configuration options. This function must be called before any other operation. It can only be called once — subsequent calls raise a `RuntimeError`.
+
+Parameters set to `None` are **omitted** from the configuration and fall back to Zvec's internal defaults, which may be derived from the runtime environment (e.g., cgroup CPU/memory limits). Explicitly provided values always override defaults.
+
+## Parameters
+
+### Logging configuration
+
+<ParamField path="log_type" type="LogType" default="LogType.CONSOLE">
+  Logger destination.
+  
+  - `LogType.CONSOLE` (default if omitted or set to this)
+  - `LogType.FILE`
+  
+  If `None`, uses internal default (currently `CONSOLE`).
+</ParamField>
+
+<ParamField path="log_level" type="LogLevel" default="LogLevel.WARN">
+  Minimum log severity. Accepted values: `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`.
+  
+  If `None`, uses internal default (`WARN`).
+</ParamField>
+
+<ParamField path="log_dir" type="string" default="./logs">
+  Directory for log files (only used when `log_type=FILE`).
+  
+  Parent directories are **not** created automatically. If `None`, internal default is used.
+</ParamField>
+
+<ParamField path="log_basename" type="string" default="zvec.log">
+  Base name for rotated log files (e.g., `zvec.log.1`, `zvec.log.2`).
+</ParamField>
+
+<ParamField path="log_file_size" type="number" default="2048">
+  Max size per log file in **MB** before rotation. Default: 2048 MB (2 GB).
+</ParamField>
+
+<ParamField path="log_overdue_days" type="number" default="7">
+  Days to retain rotated log files before deletion.
+</ParamField>
+
+### Thread configuration
+
+<ParamField path="query_threads" type="number">
+  Number of threads for query execution.
+  
+  If `None` (default), inferred from available CPU cores (via cgroup). Must be ≥ 1 if provided.
+</ParamField>
+
+<ParamField path="optimize_threads" type="number">
+  Threads for background tasks (e.g., compaction, indexing).
+  
+  If `None`, defaults to same as `query_threads` or CPU count.
+</ParamField>
+
+### Query optimization
+
+<ParamField path="invert_to_forward_scan_ratio" type="number" default="0.9">
+  Threshold to switch from inverted index to full forward scan.
+  
+  Range: [0.0, 1.0]. Higher → more aggressive index skipping. Default: 0.9 (if omitted).
+</ParamField>
+
+<ParamField path="brute_force_by_keys_ratio" type="number" default="0.1">
+  Threshold to use brute-force key lookup over index.
+  
+  Lower → prefer index; higher → prefer brute-force. Range: [0.0, 1.0]. Default: 0.1.
+</ParamField>
+
+### Memory configuration
+
+<ParamField path="memory_limit_mb" type="number">
+  Soft memory cap in MB. Zvec may throttle or fail operations approaching this limit.
+  
+  If `None`, inferred from cgroup memory limit × 0.8 (e.g., in Docker). Must be > 0 if provided.
+</ParamField>
+
+## Return value
+
+Returns `None`.
+
+## Exceptions
+
+- `RuntimeError`: If Zvec is already initialized.
+- `ValueError`: On invalid values (e.g., negative thread count, log level out of range).
+- `TypeError`: If a value has incorrect type (e.g., string for `query_threads`).
+
+## Examples
+
+### Initialize with defaults
+
+Log to console and auto-detect resources:
+
+```python
+import zvec
+
+zvec.init()
+```
+
+### Customize logging to file
+
+With rotation settings:
+
+```python
+import zvec
+from zvec import LogType
+
+zvec.init(
+    log_type=LogType.FILE,
+    log_dir="/var/log/zvec",
+    log_file_size=1024,
+    log_overdue_days=30
+)
+```
+
+### Limit resources explicitly
+
+Set memory and thread limits:
+
+```python
+import zvec
+
+zvec.init(
+    memory_limit_mb=2048,
+    query_threads=4,
+    optimize_threads=2
+)
+```
+
+### Fine-tune query heuristics
+
+Customize query optimization thresholds:
+
+```python
+import zvec
+
+zvec.init(
+    invert_to_forward_scan_ratio=0.95,
+    brute_force_by_keys_ratio=0.05
+)
+```
+
+## Notes
+
+- All `None` arguments are **excluded** from the configuration payload, allowing the core library to apply environment-aware defaults.
+- This design ensures container-friendliness: in Kubernetes/Docker, omitting `memory_limit_mb` and thread counts lets Zvec auto-adapt.
+- In containerized environments, Zvec automatically detects cgroup limits for optimal resource utilization.

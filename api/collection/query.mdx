@@ -1,0 +1,324 @@
+---
+title: "Query Operations"
+description: "Perform vector similarity search and retrieve documents"
+---
+
+## query()
+
+Perform vector similarity search with optional filtering and re-ranking. This is the primary method for semantic search in Zvec.
+
+### Signature
+
+```python
+def query(
+    self,
+    vectors: Optional[Union[VectorQuery, list[VectorQuery]]] = None,
+    *,
+    topk: int = 10,
+    filter: Optional[str] = None,
+    include_vector: bool = False,
+    output_fields: Optional[list[str]] = None,
+    reranker: Optional[ReRanker] = None,
+) -> list[Doc]
+```
+
+### Parameters
+
+<ParamField path="vectors" type="Union[VectorQuery, list[VectorQuery]]" required>
+  One or more vector queries to execute. Each `VectorQuery` specifies:
+  - The vector field to search
+  - The query vector (or document ID to use as query)
+  - Optional index-specific parameters (e.g., `ef` for HNSW)
+  
+  At least one `VectorQuery` must be provided.
+</ParamField>
+
+<ParamField path="topk" type="int" default="10">
+  Number of nearest neighbors to return. Must be > 0.
+</ParamField>
+
+<ParamField path="filter" type="str" optional>
+  Boolean expression to pre-filter candidates before similarity search.
+  
+  Examples:
+  - `"category == 'tech'"`
+  - `"price < 100 AND rating >= 4.5"`
+  - `"tags ARRAY_CONTAINS 'python'"`
+</ParamField>
+
+<ParamField path="include_vector" type="bool" default="false">
+  Whether to include vector data in the results. Set to `false` to reduce memory usage if you only need scalar fields.
+</ParamField>
+
+<ParamField path="output_fields" type="list[str]" optional>
+  List of scalar field names to return. If `None`, all fields are included.
+  
+  Use this to reduce response size when you only need specific fields.
+</ParamField>
+
+<ParamField path="reranker" type="ReRanker" optional>
+  A re-ranking function to refine results after the initial vector search.
+  
+  See [Re-ranking](/api/reranking/overview) for available options.
+</ParamField>
+
+### Returns
+
+<ResponseField name="results" type="list[Doc]">
+  List of matching documents sorted by relevance score (highest first).
+  
+  Each `Doc` contains:
+  - `id`: Document ID
+  - `score`: Relevance score (higher is more similar)
+  - `fields`: Scalar metadata fields
+  - `vectors`: Vector embeddings (if `include_vector=True`)
+</ResponseField>
+
+### Basic Example
+
+```python
+from zvec import VectorQuery
+
+# Simple vector search
+results = collection.query(
+    vectors=VectorQuery("embedding", vector=[0.1, 0.2, 0.3, 0.4]),
+    topk=5
+)
+
+for doc in results:
+    print(f"{doc.id}: {doc.score:.4f} - {doc.field('title')}")
+```
+
+### With Filtering
+
+Pre-filter candidates using boolean expressions:
+
+```python
+results = collection.query(
+    vectors=VectorQuery("embedding", vector=query_vector),
+    topk=10,
+    filter="category == 'technology' AND published_year >= 2023",
+    output_fields=["title", "author", "published_year"]
+)
+```
+
+### Query by Document ID
+
+Use an existing document's vector as the query:
+
+```python
+# Find documents similar to doc_123
+results = collection.query(
+    vectors=VectorQuery("embedding", id="doc_123"),
+    topk=10
+)
+```
+
+## VectorQuery
+
+Defines a single vector search query.
+
+### Constructor
+
+```python
+VectorQuery(
+    field_name: str,
+    id: Optional[str] = None,
+    vector: VectorType = None,
+    param: Optional[Union[HnswQueryParam, IVFQueryParam]] = None
+)
+```
+
+<ParamField path="field_name" type="str" required>
+  Name of the vector field to search.
+</ParamField>
+
+<ParamField path="id" type="str" optional>
+  Document ID whose vector should be used as the query. Mutually exclusive with `vector`.
+</ParamField>
+
+<ParamField path="vector" type="list[float] | np.ndarray" optional>
+  Explicit query vector. Mutually exclusive with `id`.
+</ParamField>
+
+<ParamField path="param" type="Union[HnswQueryParam, IVFQueryParam]" optional>
+  Index-specific search parameters to control accuracy vs. speed tradeoffs.
+</ParamField>
+
+### Example with Query Parameters
+
+```python
+from zvec import VectorQuery, HnswQueryParam
+
+# Use HNSW index with higher ef for better recall
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=200)  # Higher ef = better accuracy, slower
+    ),
+    topk=10
+)
+```
+
+## Query Parameters
+
+### HnswQueryParam
+
+Tune HNSW index search behavior:
+
+```python
+from zvec import HnswQueryParam
+
+param = HnswQueryParam(
+    ef=100  # Number of candidates to evaluate (default: 64)
+)
+```
+
+<ParamField path="ef" type="int" default="64">
+  Number of neighbors to explore during search. Higher values improve recall but increase latency.
+  
+  - **Low ef (32-64)**: Faster, lower recall
+  - **Medium ef (64-128)**: Balanced
+  - **High ef (128-512)**: Slower, higher recall
+</ParamField>
+
+### IVFQueryParam
+
+Tune IVF index search behavior:
+
+```python
+from zvec import IVFQueryParam
+
+param = IVFQueryParam(
+    nprobe=10  # Number of clusters to search (default: 1)
+)
+```
+
+<ParamField path="nprobe" type="int" default="1">
+  Number of clusters (partitions) to search. Higher values improve recall but increase latency.
+  
+  - **Low nprobe (1-5)**: Faster, lower recall
+  - **Medium nprobe (5-20)**: Balanced
+  - **High nprobe (20-100)**: Slower, higher recall
+</ParamField>
+
+## Hybrid Search
+
+Search multiple vector fields simultaneously:
+
+```python
+from zvec import VectorQuery
+
+# Search both dense and sparse embeddings
+results = collection.query(
+    vectors=[
+        VectorQuery("dense_embedding", vector=dense_vec),
+        VectorQuery("sparse_embedding", vector=sparse_vec)
+    ],
+    topk=10,
+    reranker=zvec.WeightedReRanker(weights=[0.7, 0.3])  # 70% dense, 30% sparse
+)
+```
+
+## fetch()
+
+Retrieve documents by ID. This is a direct lookup operation, not a similarity search.
+
+### Signature
+
+```python
+def fetch(self, ids: Union[str, list[str]]) -> dict[str, Doc]
+```
+
+### Parameters
+
+<ParamField path="ids" type="Union[str, list[str]]" required>
+  One or more document IDs to retrieve.
+</ParamField>
+
+### Returns
+
+<ResponseField name="results" type="dict[str, Doc]">
+  Dictionary mapping document IDs to `Doc` objects. Missing IDs are omitted from the result.
+</ResponseField>
+
+### Example
+
+```python
+# Fetch single document
+result = collection.fetch("doc_123")
+if "doc_123" in result:
+    doc = result["doc_123"]
+    print(f"Title: {doc.field('title')}")
+
+# Fetch multiple documents
+ids = ["doc_1", "doc_2", "doc_3"]
+results = collection.fetch(ids)
+
+for doc_id, doc in results.items():
+    print(f"{doc_id}: {doc.field('title')}")
+
+# Handle missing documents
+if len(results) < len(ids):
+    missing = set(ids) - set(results.keys())
+    print(f"Documents not found: {missing}")
+```
+
+## Performance Tips
+
+<Tip>
+  **Use filters wisely**: Pre-filtering with scalar indices is faster than post-filtering in application code.
+</Tip>
+
+```python
+# Good: Database-level filtering
+results = collection.query(
+    vectors=query,
+    filter="category == 'tech'",
+    topk=10
+)
+
+# Bad: Post-filtering in Python
+all_results = collection.query(vectors=query, topk=100)
+filtered = [doc for doc in all_results if doc.field('category') == 'tech'][:10]
+```
+
+<Tip>
+  **Specify output_fields**: Only request the fields you need to reduce memory usage.
+</Tip>
+
+```python
+results = collection.query(
+    vectors=query,
+    topk=100,
+    output_fields=["id", "title"],  # Don't load large fields
+    include_vector=False  # Skip vectors if not needed
+)
+```
+
+<Tip>
+  **Tune query parameters**: Balance speed vs. accuracy based on your use case.
+</Tip>
+
+```python
+# Fast but lower recall (good for real-time search)
+fast_results = collection.query(
+    vectors=VectorQuery("embedding", vector=vec, param=HnswQueryParam(ef=32)),
+    topk=10
+)
+
+# Slower but higher recall (good for batch jobs)
+accurate_results = collection.query(
+    vectors=VectorQuery("embedding", vector=vec, param=HnswQueryParam(ef=256)),
+    topk=10
+)
+```
+
+## See Also
+
+- [VectorQuery](/api/query/vector-query)
+- [HnswQueryParam](/api/query/hnsw-params)
+- [IVFQueryParam](/api/query/ivf-params)
+- [Re-ranking](/api/reranking/overview)
+- [Filtering Guide](/guides/filtering)

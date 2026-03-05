@@ -1,0 +1,133 @@
+---
+title: Introduction
+description: Learn about Zvec, a lightweight in-process vector database built for production-grade similarity search
+---
+
+**Zvec** is an open-source, in-process vector database — lightweight, lightning-fast, and designed to embed directly into applications. Built on **Proxima** (Alibaba's battle-tested vector search engine), it delivers production-grade, low-latency, scalable similarity search with minimal setup.
+
+## Why Zvec?
+
+Unlike traditional client-server vector databases, Zvec runs **in-process** as a library that embeds directly into your application. This architectural choice brings several key advantages:
+
+- **Zero infrastructure overhead** — No servers to deploy, configure, or maintain
+- **Ultra-low latency** — Eliminate network hops and serialization overhead
+- **Simplified deployment** — Works anywhere your code runs: notebooks, servers, CLI tools, or edge devices
+- **No network dependencies** — Perfect for offline environments and air-gapped systems
+- **Easier debugging** — Stack traces and profiling work seamlessly with your application code
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Blazing Fast" icon="bolt">
+    Searches billions of vectors in milliseconds, powered by Proxima's battle-tested algorithms
+  </Card>
+  <Card title="Simple, Just Works" icon="circle-check">
+    Install and start searching in seconds. No servers, no config, no fuss
+  </Card>
+  <Card title="Dense + Sparse Vectors" icon="layer-group">
+    Work with both dense and sparse embeddings, with native support for multi-vector queries in a single call
+  </Card>
+  <Card title="Hybrid Search" icon="filter">
+    Combine semantic similarity with structured filters for precise results
+  </Card>
+</CardGroup>
+
+### Dense and Sparse Vector Support
+
+Zvec natively supports both **dense** and **sparse** embeddings, enabling flexible multi-vector search strategies:
+
+- **Dense vectors**: Traditional embeddings from models like BERT, OpenAI, or Sentence Transformers
+- **Sparse vectors**: BM25, SPLADE, or other sparse representations for keyword-based semantic search
+- **Multi-vector queries**: Query multiple vector fields simultaneously in a single call
+
+### Hybrid Search Capabilities
+
+Combine the power of semantic similarity with structured filtering:
+
+```python
+# Search with semantic vectors AND structured filters
+results = collection.query(
+    vectors=VectorQuery("embedding", vector=[0.1, 0.2, 0.3, 0.4]),
+    filter="category == 'technology' AND publish_date > '2024-01-01'",
+    topk=10
+)
+```
+
+## Use Cases
+
+Zvec is ideal for applications that need vector search without the complexity of distributed systems:
+
+<CardGroup cols={2}>
+  <Card title="RAG (Retrieval-Augmented Generation)" icon="message-bot">
+    Build intelligent chatbots and AI assistants with semantic document retrieval
+  </Card>
+  <Card title="Semantic Search" icon="magnifying-glass">
+    Power search engines that understand meaning, not just keywords
+  </Card>
+  <Card title="Recommendation Systems" icon="stars">
+    Find similar items, products, or content based on embeddings
+  </Card>
+  <Card title="Document Clustering" icon="diagram-project">
+    Group similar documents, images, or other content automatically
+  </Card>
+</CardGroup>
+
+### When to Choose Zvec
+
+**Choose Zvec when you need:**
+- Fast prototyping and development without infrastructure setup
+- Low-latency search within a single application instance
+- Simplified deployment for edge devices or embedded systems
+- Local-first applications with offline support
+- Testing and experimentation before scaling to distributed systems
+
+**Consider alternatives when you need:**
+- Multi-tenant SaaS applications with millions of users
+- Distributed search across multiple machines
+- High availability with automatic failover
+- Built-in auth, RBAC, and enterprise security features
+
+## Comparison to Other Vector Databases
+
+| Feature | Zvec (In-Process) | Client-Server DBs |
+|---------|-------------------|-------------------|
+| **Deployment** | Embed in application | Separate server(s) |
+| **Network latency** | None | Adds milliseconds per query |
+| **Infrastructure** | None required | Requires hosting, monitoring |
+| **Scalability** | Single-process | Horizontal scaling |
+| **Best for** | < 100M vectors, single-node | > 100M vectors, distributed |
+
+<Note>
+Zvec is optimized for scenarios where your vector data fits comfortably in memory on a single machine (up to billions of vectors on modern servers). For larger-scale distributed deployments, consider client-server alternatives.
+</Note>
+
+## Architecture Overview
+
+Zvec is built on **Proxima**, Alibaba's production-grade vector search engine that powers large-scale AI applications. The architecture consists of:
+
+- **Core engine (C++)**: High-performance vector indexing and search algorithms
+- **Language bindings**: Python and Node.js bindings via native extensions
+- **Zero dependencies**: Runs entirely in-process with no external services
+
+## Performance at Scale
+
+Zvec delivers exceptional speed and efficiency, making it ideal for demanding production workloads. On a dataset of 10 million 768-dimensional vectors:
+
+- **Query latency**: < 10ms for 95th percentile
+- **Indexing speed**: Millions of vectors per second
+- **Memory efficiency**: Optimized data structures with optional quantization
+
+<Tip>
+For detailed benchmark methodology, configurations, and complete results, see our [Benchmarks documentation](https://zvec.org/en/docs/benchmarks/).
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Zvec for Python or Node.js
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first vector search application in 5 minutes
+  </Card>
+</CardGroup>

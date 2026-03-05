@@ -1,0 +1,143 @@
+---
+title: 'HnswQueryParam'
+description: 'Query parameters for HNSW index searches'
+---
+
+## Overview
+
+The `HnswQueryParam` class controls query-time parameters for HNSW (Hierarchical Navigable Small World) index searches. It allows you to trade off between search speed and accuracy.
+
+## Constructor
+
+```python
+HnswQueryParam(
+    ef: int = 300,
+    radius: float = 0.0,
+    is_linear: bool = False,
+    is_using_refiner: bool = False
+)
+```
+
+## Parameters
+
+<ParamField path="ef" type="int" default="300">
+  Size of the dynamic candidate list during search. Larger values improve recall (accuracy) but slow down search. This is the primary tuning parameter for HNSW query performance.
+  
+  **Typical range:** 100-500 for most use cases. Higher values (500+) for maximum accuracy.
+</ParamField>
+
+<ParamField path="radius" type="float" default="0.0">
+  Search radius for range queries. When set to a value greater than 0, only results within this distance threshold will be returned. Default is 0.0 (disabled).
+</ParamField>
+
+<ParamField path="is_linear" type="bool" default="False">
+  Force linear (brute-force) search instead of using the HNSW index. Useful for debugging or verifying index accuracy.
+</ParamField>
+
+<ParamField path="is_using_refiner" type="bool" default="False">
+  Whether to use refiner for the query. Refiners can improve accuracy by re-scoring candidates with higher-precision distance calculations.
+</ParamField>
+
+## Properties
+
+### ef
+
+Size of the dynamic candidate list during HNSW search.
+
+**Type:** `int`
+
+## Examples
+
+### Basic HNSW query
+
+```python
+from zvec import HnswQueryParam, VectorQuery
+
+# Standard accuracy search
+params = HnswQueryParam(ef=300)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### High accuracy search
+
+```python
+from zvec import HnswQueryParam, VectorQuery
+
+# Higher ef for better accuracy (slower)
+params = HnswQueryParam(ef=500)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Fast search with lower accuracy
+
+```python
+from zvec import HnswQueryParam, VectorQuery
+
+# Lower ef for faster search (lower accuracy)
+params = HnswQueryParam(ef=100)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Range query
+
+```python
+from zvec import HnswQueryParam, VectorQuery
+
+# Only return results within distance 0.5
+params = HnswQueryParam(ef=300, radius=0.5)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Force linear search
+
+```python
+from zvec import HnswQueryParam, VectorQuery
+
+# Bypass the index and use brute-force search
+params = HnswQueryParam(is_linear=True)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+## Performance Tuning
+
+<Tip>
+  **Balancing speed and accuracy:**
+  - Start with the default `ef=300`
+  - Decrease to 100-200 if speed is critical and you can tolerate slightly lower recall
+  - Increase to 400-600 for maximum accuracy when recall is critical
+  - The `ef` value at query time can be different from `ef_construction` used during index building
+</Tip>
+
+<Info>
+  The `ef` parameter should be at least as large as the number of results (`k`) you want to retrieve. Setting `ef < k` will limit your results.
+</Info>
+
+## See Also
+
+- [HnswIndexParam](/api/index/hnsw) - Index construction parameters for HNSW
+- [VectorQuery](/api/query/vector-query) - Vector query class that uses these parameters

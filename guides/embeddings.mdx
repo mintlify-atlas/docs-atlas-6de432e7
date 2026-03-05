@@ -1,0 +1,498 @@
+---
+title: Embedding Functions
+description: Generate vector embeddings using built-in integrations or custom functions
+---
+
+Embedding functions convert raw data (text, images, audio) into vector representations. Zvec provides built-in integrations with popular embedding models and supports custom implementations.
+
+## Overview
+
+Zvec supports two types of embeddings:
+
+- **Dense embeddings**: Fixed-length vectors for semantic similarity
+- **Sparse embeddings**: Key-value pairs for keyword matching
+
+## Built-in Dense Embeddings
+
+### Local Models (No API Key)
+
+#### DefaultLocalDenseEmbedding
+
+Runs locally using sentence-transformers with the all-MiniLM-L6-v2 model:
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding
+
+# Initialize (downloads model on first run)
+emb_fn = DefaultLocalDenseEmbedding()
+
+# Generate embedding
+vector = emb_fn.embed("Machine learning algorithms")
+print(len(vector))  # 384 dimensions
+```
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    pip install sentence-transformers
+    ```
+  </Step>
+
+  <Step title="Configure Model Source">
+    ```python
+    # Default: Hugging Face (international)
+    emb = DefaultLocalDenseEmbedding(model_source="huggingface")
+
+    # For users in China: ModelScope
+    emb = DefaultLocalDenseEmbedding(model_source="modelscope")
+    ```
+  </Step>
+
+  <Step title="Optional: GPU Acceleration">
+    ```python
+    # Use GPU if available
+    emb = DefaultLocalDenseEmbedding(device="cuda")
+
+    # Apple Silicon
+    emb = DefaultLocalDenseEmbedding(device="mps")
+
+    # Auto-detect
+    emb = DefaultLocalDenseEmbedding(device=None)
+    ```
+  </Step>
+</Steps>
+
+**Configuration Options:**
+
+```python
+emb = DefaultLocalDenseEmbedding(
+    model_source="huggingface",  # or "modelscope"
+    device=None,                  # "cpu", "cuda", "mps", or None
+    normalize_embeddings=True,    # L2 normalization
+    batch_size=32                 # Batch encoding size
+)
+```
+
+### API-Based Models
+
+#### OpenAI Embeddings
+
+Use OpenAI's embedding models:
+
+```python
+from zvec.extension import OpenAIDenseEmbedding
+import os
+
+# Set API key
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+# Initialize
+emb_fn = OpenAIDenseEmbedding(
+    model="text-embedding-3-small",  # 1536 dimensions
+    dimension=1536  # Optional: custom dimension
+)
+
+# Generate embedding
+vector = emb_fn.embed("Natural language processing")
+```
+
+**Available Models:**
+
+| Model | Dimensions | Cost | Use Case |
+|-------|------------|------|----------|
+| text-embedding-3-small | 1536 | Low | Cost-efficient, good quality |
+| text-embedding-3-large | 3072 | Medium | Highest quality |
+| text-embedding-ada-002 | 1536 | Low | Legacy, stable |
+
+<Steps>
+  <Step title="Install OpenAI SDK">
+    ```bash
+    pip install openai
+    ```
+  </Step>
+
+  <Step title="Configure API Key">
+    ```python
+    import os
+    os.environ["OPENAI_API_KEY"] = "sk-your-key"
+
+    # Or pass directly
+    emb = OpenAIDenseEmbedding(api_key="sk-your-key")
+    ```
+  </Step>
+
+  <Step title="Optional: Custom Endpoint">
+    ```python
+    # Azure OpenAI
+    emb = OpenAIDenseEmbedding(
+        model="text-embedding-ada-002",
+        api_key="your-azure-key",
+        base_url="https://your-resource.openai.azure.com/"
+    )
+    ```
+  </Step>
+</Steps>
+
+#### Qwen Embeddings (DashScope)
+
+Use Alibaba Cloud's Qwen models:
+
+```python
+from zvec.extension import QwenDenseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "sk-..."
+
+emb_fn = QwenDenseEmbedding(
+    model="text-embedding-v3",
+    dimension=1024
+)
+
+vector = emb_fn.embed("人工智能技术")  # Works great with Chinese
+```
+
+<Tip>
+  Qwen models excel at Chinese text but also support English. Good choice for multilingual applications or users in China.
+</Tip>
+
+## Built-in Sparse Embeddings
+
+### BM25 (Best Match 25)
+
+Generate sparse vectors for keyword-based search:
+
+```python
+from zvec.extension import BM25EmbeddingFunction
+
+# Option 1: Built-in encoder (no training)
+bm25 = BM25EmbeddingFunction(
+    language="en",           # "en" or "zh"
+    encoding_type="query"   # "query" or "document"
+)
+
+sparse_vec = bm25.embed("machine learning algorithms")
+print(sparse_vec)
+# {1169440797: 0.29, 2045788977: 0.70, ...}
+```
+
+<Steps>
+  <Step title="Install DashText">
+    ```bash
+    pip install dashtext
+    ```
+  </Step>
+
+  <Step title="Choose Encoding Type">
+    Use different types for indexing vs querying:
+
+    ```python
+    # For indexing documents
+    bm25_doc = BM25EmbeddingFunction(
+        language="en",
+        encoding_type="document"
+    )
+
+    # For querying
+    bm25_query = BM25EmbeddingFunction(
+        language="en",
+        encoding_type="query"
+    )
+    ```
+  </Step>
+
+  <Step title="Optional: Train on Custom Corpus">
+    For domain-specific terminology:
+
+    ```python
+    corpus = [
+        "Machine learning is a subset of AI",
+        "Deep learning uses neural networks",
+        # ... your documents
+    ]
+
+    bm25_custom = BM25EmbeddingFunction(
+        corpus=corpus,
+        encoding_type="document",
+        b=0.75,   # Length normalization
+        k1=1.2    # Term frequency saturation
+    )
+    ```
+  </Step>
+</Steps>
+
+**BM25 Parameters:**
+
+```python
+bm25 = BM25EmbeddingFunction(
+    language="en",           # "en" or "zh" (for built-in only)
+    encoding_type="query",   # "query" or "document"
+    corpus=None,             # Optional: train on corpus
+    b=0.75,                  # Length normalization [0-1]
+    k1=1.2                   # TF saturation parameter
+)
+```
+
+## Custom Embedding Functions
+
+### Dense Embedding Protocol
+
+Implement the `DenseEmbeddingFunction` protocol:
+
+```python
+from zvec.extension import DenseEmbeddingFunction
+from typing import List
+
+class MyCustomEmbedding:
+    """Custom dense embedding implementation"""
+    
+    def __init__(self, model_path: str, dimension: int):
+        self.dimension = dimension
+        # Load your model
+        self.model = load_custom_model(model_path)
+    
+    def embed(self, input: str) -> List[float]:
+        """Generate dense vector for input text"""
+        # Your embedding logic
+        return self.model.encode(input).tolist()
+
+# Use it
+my_emb = MyCustomEmbedding("/path/to/model", dimension=512)
+vector = my_emb.embed("Hello world")
+```
+
+### Sparse Embedding Protocol
+
+```python
+from zvec.extension import SparseEmbeddingFunction
+from typing import Dict
+
+class MyTFIDFEmbedding:
+    """Custom TF-IDF sparse embedding"""
+    
+    def __init__(self, vocab_size: int):
+        self.vocab_size = vocab_size
+        # Initialize TF-IDF model
+        self.model = TFIDFModel(vocab_size)
+    
+    def embed(self, input: str) -> Dict[int, float]:
+        """Generate sparse vector as {index: weight}"""
+        # Your sparse embedding logic
+        tokens = self.tokenize(input)
+        sparse_vec = {}
+        for token_id, weight in self.model.transform(tokens):
+            if weight > 0:
+                sparse_vec[token_id] = weight
+        return sparse_vec
+    
+    def tokenize(self, text: str):
+        # Tokenization logic
+        return text.lower().split()
+
+# Use it
+tfidf = MyTFIDFEmbedding(vocab_size=10000)
+sparse_vec = tfidf.embed("custom sparse embedding")
+```
+
+## Using Embeddings in Collections
+
+### Single Embedding Function
+
+```python
+from zvec import Doc, CollectionSchema, VectorSchema, FieldSchema, DataType
+from zvec.extension import DefaultLocalDenseEmbedding
+import zvec
+
+# Initialize embedding function
+emb_fn = DefaultLocalDenseEmbedding()
+
+# Create schema
+schema = CollectionSchema(
+    name="documents",
+    fields=[FieldSchema("id", DataType.INT64)],
+    vectors=[VectorSchema("embedding", DataType.VECTOR_FP32, dimension=384)]
+)
+
+zvec.init()
+collection = zvec.create_and_open("./my_collection", schema)
+
+# Insert with embeddings
+documents = [
+    "Machine learning algorithms",
+    "Natural language processing",
+    "Computer vision techniques"
+]
+
+docs = [
+    Doc(
+        id=f"doc_{i}",
+        fields={"id": i},
+        vectors={"embedding": emb_fn.embed(text)}
+    )
+    for i, text in enumerate(documents)
+]
+
+collection.insert(docs)
+```
+
+### Multiple Embedding Functions (Hybrid)
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding, BM25EmbeddingFunction
+
+# Initialize both
+dense_fn = DefaultLocalDenseEmbedding()
+sparse_fn = BM25EmbeddingFunction(language="en", encoding_type="document")
+
+# Schema with both vector types
+schema = CollectionSchema(
+    name="hybrid_docs",
+    fields=[FieldSchema("id", DataType.INT64)],
+    vectors=[
+        VectorSchema("dense", DataType.VECTOR_FP32, dimension=384),
+        VectorSchema("sparse", DataType.SPARSE_VECTOR_FP32)
+    ]
+)
+
+# Insert with both embeddings
+docs = [
+    Doc(
+        id=f"doc_{i}",
+        fields={"id": i},
+        vectors={
+            "dense": dense_fn.embed(text),
+            "sparse": sparse_fn.embed(text)
+        }
+    )
+    for i, text in enumerate(documents)
+]
+
+collection.insert(docs)
+```
+
+## Batch Processing
+
+Optimize embedding generation for large datasets:
+
+```python
+def embed_batch(texts: List[str], emb_fn, batch_size: int = 100):
+    """Process texts in batches"""
+    embeddings = []
+    
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        batch_embeddings = [emb_fn.embed(text) for text in batch]
+        embeddings.extend(batch_embeddings)
+        
+        if i % 1000 == 0:
+            print(f"Processed {i}/{len(texts)} documents")
+    
+    return embeddings
+
+# Use it
+texts = [...]  # Your large dataset
+emb_fn = DefaultLocalDenseEmbedding()
+vectors = embed_batch(texts, emb_fn, batch_size=100)
+```
+
+## Embedding Best Practices
+
+<Steps>
+  <Step title="Match Dimensions">
+    Ensure schema dimensions match embedding output:
+
+    ```python
+    emb_fn = DefaultLocalDenseEmbedding()  # 384 dims
+    
+    # ✅ Correct
+    VectorSchema("emb", DataType.VECTOR_FP32, dimension=384)
+    
+    # ❌ Wrong
+    VectorSchema("emb", DataType.VECTOR_FP32, dimension=768)  # Mismatch!
+    ```
+  </Step>
+
+  <Step title="Normalize for Cosine Similarity">
+    ```python
+    import numpy as np
+
+    def normalize(vector):
+        norm = np.linalg.norm(vector)
+        return (vector / norm).tolist()
+
+    # Apply to embeddings
+    vector = emb_fn.embed(text)
+    normalized = normalize(vector)
+    ```
+  </Step>
+
+  <Step title="Cache Common Queries">
+    ```python
+    from functools import lru_cache
+
+    @lru_cache(maxsize=1000)
+    def embed_cached(text: str):
+        return emb_fn.embed(text)
+
+    # Repeated queries use cache
+    v1 = embed_cached("common query")
+    v2 = embed_cached("common query")  # Instant
+    ```
+  </Step>
+
+  <Step title="Use Consistent Models">
+    Always use the same model for indexing and querying:
+
+    ```python
+    # ✅ Correct: Same model
+    index_fn = DefaultLocalDenseEmbedding()
+    query_fn = DefaultLocalDenseEmbedding()
+
+    # ❌ Wrong: Different models
+    index_fn = DefaultLocalDenseEmbedding()  # 384 dims
+    query_fn = OpenAIDenseEmbedding()        # 1536 dims
+    ```
+  </Step>
+</Steps>
+
+## Comparison: Model Selection
+
+| Model | Type | Dimensions | Speed | Quality | Cost |
+|-------|------|------------|-------|---------|------|
+| DefaultLocalDenseEmbedding | Dense | 384 | Fast | Good | Free |
+| OpenAI text-embedding-3-small | Dense | 1536 | Medium | Great | Low |
+| OpenAI text-embedding-3-large | Dense | 3072 | Medium | Best | Medium |
+| Qwen text-embedding-v3 | Dense | 1024 | Medium | Great | Low |
+| BM25 (built-in) | Sparse | Variable | Very Fast | Good | Free |
+| BM25 (custom corpus) | Sparse | Variable | Fast | Better | Free |
+
+<Tip>
+  **Quick Selection Guide:**
+  - **Starting out**: `DefaultLocalDenseEmbedding` (free, fast, no API)
+  - **Production semantic search**: OpenAI or Qwen (higher quality)
+  - **Keyword matching**: BM25 (fast, exact terms)
+  - **Hybrid search**: Dense + BM25 (best overall results)
+  - **Multilingual**: Qwen or OpenAI multilingual models
+</Tip>
+
+## Error Handling
+
+```python
+try:
+    vector = emb_fn.embed(text)
+except ValueError as e:
+    # Invalid input (empty string, wrong type, etc.)
+    print(f"Invalid input: {e}")
+except RuntimeError as e:
+    # Model/API error
+    print(f"Embedding failed: {e}")
+except ImportError as e:
+    # Missing dependency
+    print(f"Install required package: {e}")
+```
+
+## Next Steps
+
+- Learn about [Dense Vectors](/guides/dense-vectors) and [Sparse Vectors](/guides/sparse-vectors)
+- Combine embeddings in [Hybrid Search](/guides/hybrid-search)
+- Optimize embedding generation with [Performance Tuning](/guides/performance-tuning)
+- Add metadata with [Filtering](/guides/filtering)

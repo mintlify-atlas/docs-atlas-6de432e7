@@ -1,0 +1,450 @@
+---
+title: Reranking
+description: Improve search quality with multi-vector reranking strategies
+---
+
+Reranking refines the output of vector queries by applying secondary scoring strategies. This is especially powerful for multi-vector queries where results from different vector fields need to be combined.
+
+## Overview
+
+Zvec provides a flexible reranking framework through the `RerankFunction` base class and built-in implementations:
+
+- **RrfReRanker**: Reciprocal Rank Fusion (position-based)
+- **WeightedReRanker**: Weighted score combination
+- **Custom rerankers**: Model-based or domain-specific
+
+## RerankFunction Base Class
+
+All rerankers inherit from `RerankFunction`:
+
+```python
+from zvec.extension.rerank_function import RerankFunction
+from zvec.model.doc import Doc
+from typing import Optional
+
+class RerankFunction(ABC):
+    """Abstract base class for re-ranking search results."""
+    
+    def __init__(
+        self,
+        topn: int = 10,
+        rerank_field: Optional[str] = None
+    ):
+        self._topn = topn
+        self._rerank_field = rerank_field
+    
+    @abstractmethod
+    def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]:
+        """Re-rank documents from one or more vector queries.
+        
+        Args:
+            query_results: Mapping from vector field name to list of documents
+        
+        Returns:
+            Re-ranked list of documents (length ≤ topn)
+        """
+        ...
+```
+
+### Parameters
+
+- **topn** (int): Number of documents to return after reranking
+- **rerank_field** (str, optional): Field name for reranking input (model-based rerankers)
+
+---
+
+## RrfReRanker (Reciprocal Rank Fusion)
+
+### Overview
+
+RRF combines results from multiple vector queries using position-based scoring. It's effective when relevance scores across different vector fields aren't directly comparable.
+
+### How It Works
+
+For each document at rank `r` in a result list, RRF assigns a score:
+
+```
+RRF_score = 1 / (k + r + 1)
+```
+
+Where:
+- `k` is the rank constant (smoothing parameter)
+- `r` is the zero-based rank position
+
+Final scores are summed across all query result lists.
+
+### Configuration
+
+```python
+from zvec.extension.multi_vector_reranker import RrfReRanker
+
+reranker = RrfReRanker(
+    topn=10,           # Return top 10 documents
+    rank_constant=60   # RRF smoothing constant (k)
+)
+```
+
+### Parameters
+
+#### `topn` (int)
+Number of top documents to return after reranking.
+
+**Default:** `10`
+
+#### `rank_constant` (int)
+Smoothing constant `k` in the RRF formula.
+
+- **Higher values:** Reduce impact of rank position differences
+- **Lower values:** Emphasize early ranks more strongly
+
+**Default:** `60`  
+**Range:** Typically 10-100
+
+### Example Usage
+
+```python
+import zvec
+from zvec.extension.multi_vector_reranker import RrfReRanker
+from zvec.typing import DataType
+
+# Create collection with multiple vector fields
+schema = zvec.CollectionSchema(
+    name="multi_modal",
+    vectors=[
+        zvec.VectorSchema("text_embedding", DataType.VECTOR_FP32, 384),
+        zvec.VectorSchema("image_embedding", DataType.VECTOR_FP32, 512)
+    ]
+)
+
+collection = zvec.create_and_open("./multi_vector_data", schema)
+
+# Insert documents with multiple vectors
+collection.insert([
+    zvec.Doc(
+        id="doc_1",
+        vectors={
+            "text_embedding": [0.1] * 384,
+            "image_embedding": [0.2] * 512
+        }
+    ),
+    zvec.Doc(
+        id="doc_2",
+        vectors={
+            "text_embedding": [0.3] * 384,
+            "image_embedding": [0.4] * 512
+        }
+    )
+])
+
+# Query multiple vector fields with RRF reranking
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("text_embedding", vector=[0.15] * 384),
+        zvec.VectorQuery("image_embedding", vector=[0.25] * 512)
+    ],
+    reranker=RrfReRanker(topn=10, rank_constant=60),
+    topk=100  # Fetch top 100 from each field, then rerank to 10
+)
+
+print(results)
+```
+
+### When to Use RRF
+
+- **Multi-modal search**: Combining text, image, audio embeddings
+- **Hybrid retrieval**: Dense + sparse vectors
+- **Cross-lingual search**: Different language embeddings
+- **Domain fusion**: Combining domain-specific embedding spaces
+
+### Advantages
+
+- **Score-independent**: Doesn't require normalized or comparable scores
+- **Robust**: Works well across different embedding types
+- **Simple**: No tuning beyond rank_constant
+
+### Disadvantages
+
+- **Position-only**: Ignores actual relevance scores
+- **Equal weighting**: All fields contribute equally (unless using weighted variant)
+
+---
+
+## WeightedReRanker
+
+### Overview
+
+WeightedReRanker combines scores from multiple vector fields using configurable weights. Scores are normalized based on the distance metric, then weighted and summed.
+
+### Configuration
+
+```python
+from zvec.extension.multi_vector_reranker import WeightedReRanker
+from zvec.typing import MetricType
+
+reranker = WeightedReRanker(
+    topn=10,
+    metric=MetricType.L2,
+    weights={
+        "text_embedding": 0.7,
+        "image_embedding": 0.3
+    }
+)
+```
+
+### Parameters
+
+#### `topn` (int)
+Number of documents to return.
+
+**Default:** `10`
+
+#### `metric` (MetricType)
+Distance metric used for score normalization.
+
+**Supported:**
+- `MetricType.L2`: Euclidean distance
+- `MetricType.IP`: Inner product
+- `MetricType.COSINE`: Cosine similarity
+
+**Default:** `MetricType.L2`
+
+#### `weights` (dict[str, float])
+Weight per vector field. Fields not specified default to weight 1.0.
+
+**Default:** `None` (all fields weighted equally)
+
+### Score Normalization
+
+WeightedReRanker normalizes scores to [0, 1] based on metric type:
+
+```python
+# L2 distance: lower is better
+def normalize_l2(score: float) -> float:
+    return 1.0 - 2 * math.atan(score) / math.pi
+
+# Inner Product: higher is better
+def normalize_ip(score: float) -> float:
+    return 0.5 + math.atan(score) / math.pi
+
+# Cosine similarity: higher is better, range [-1, 1]
+def normalize_cosine(score: float) -> float:
+    return 1.0 - score / 2.0
+```
+
+### Example Usage
+
+```python
+import zvec
+from zvec.extension.multi_vector_reranker import WeightedReRanker
+from zvec.typing import MetricType, DataType
+
+# Schema with multiple vector fields
+schema = zvec.CollectionSchema(
+    name="weighted_search",
+    vectors=[
+        zvec.VectorSchema("title_embedding", DataType.VECTOR_FP32, 384),
+        zvec.VectorSchema("content_embedding", DataType.VECTOR_FP32, 768),
+        zvec.VectorSchema("metadata_embedding", DataType.VECTOR_FP32, 128)
+    ]
+)
+
+collection = zvec.create_and_open("./weighted_data", schema)
+
+# Query with weighted reranking (prioritize title and content)
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("title_embedding", vector=title_vec),
+        zvec.VectorQuery("content_embedding", vector=content_vec),
+        zvec.VectorQuery("metadata_embedding", vector=metadata_vec)
+    ],
+    reranker=WeightedReRanker(
+        topn=10,
+        metric=MetricType.COSINE,
+        weights={
+            "title_embedding": 0.5,      # 50% weight
+            "content_embedding": 0.4,    # 40% weight
+            "metadata_embedding": 0.1    # 10% weight
+        }
+    ),
+    topk=100
+)
+```
+
+### When to Use WeightedReRanker
+
+- **Known importance hierarchy**: Title > Content > Metadata
+- **Score-based fusion**: When raw scores are meaningful
+- **Fine-tuned weights**: Domain-specific weighting strategies
+
+### Advantages
+
+- **Flexible weighting**: Control contribution of each field
+- **Score-aware**: Utilizes actual relevance scores
+- **Interpretable**: Clear how each field contributes
+
+### Disadvantages
+
+- **Requires tuning**: Optimal weights depend on data and use case
+- **Metric-dependent**: Must specify correct normalization metric
+- **Score calibration**: Assumes scores are reasonably calibrated
+
+---
+
+## Model-Based Reranking
+
+### Custom Reranker Implementation
+
+For advanced scenarios, implement a custom reranker using neural models:
+
+```python
+from zvec.extension.rerank_function import RerankFunction
+from zvec.model.doc import Doc
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+class CrossEncoderReRanker(RerankFunction):
+    """Reranker using a cross-encoder model for semantic relevance."""
+    
+    def __init__(self, model_name: str, topn: int = 10, rerank_field: str = "text"):
+        super().__init__(topn=topn, rerank_field=rerank_field)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        self.model.eval()
+    
+    def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]:
+        # Combine all results
+        all_docs = {}
+        for field_name, docs in query_results.items():
+            for doc in docs:
+                if doc.id not in all_docs:
+                    all_docs[doc.id] = doc
+        
+        # Score with cross-encoder
+        scored_docs = []
+        for doc_id, doc in all_docs.items():
+            # Get document text from rerank_field
+            doc_text = doc.fields.get(self.rerank_field, "")
+            
+            # Compute cross-encoder score
+            inputs = self.tokenizer(
+                [self.query_text],  # Must be set externally
+                [doc_text],
+                return_tensors="pt",
+                padding=True,
+                truncation=True
+            )
+            
+            with torch.no_grad():
+                score = self.model(**inputs).logits[0][0].item()
+            
+            scored_docs.append((doc, score))
+        
+        # Sort by score and return topn
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        return [doc._replace(score=score) for doc, score in scored_docs[:self.topn]]
+```
+
+### Usage
+
+```python
+# Initialize custom reranker
+reranker = CrossEncoderReRanker(
+    model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    topn=10,
+    rerank_field="content"
+)
+
+# Set query text (external to Zvec)
+reranker.query_text = "What is vector search?"
+
+# Query with custom reranker
+results = collection.query(
+    queries=[zvec.VectorQuery("embedding", vector=query_vec)],
+    reranker=reranker,
+    topk=100
+)
+```
+
+---
+
+## Comparison Table
+
+| Reranker | Use Case | Input | Complexity | Accuracy |
+|----------|----------|-------|------------|----------|
+| **RrfReRanker** | Multi-modal, hybrid | Rank positions | Low | Medium |
+| **WeightedReRanker** | Known field importance | Scores + weights | Medium | Medium-High |
+| **Model-Based** | Maximum accuracy | Query + doc text | High | Very High |
+
+## Best Practices
+
+### 1. Over-Fetch Then Rerank
+
+Retrieve more candidates than needed, then rerank:
+
+```python
+# Fetch top 100 from each field
+results = collection.query(
+    queries=[...],
+    reranker=RrfReRanker(topn=10),
+    topk=100  # Over-fetch 10x
+)
+```
+
+### 2. Tune Weights with Validation Data
+
+For WeightedReRanker, optimize weights on labeled data:
+
+```python
+# Grid search for optimal weights
+best_weights = None
+best_recall = 0
+
+for w1 in [0.3, 0.5, 0.7]:
+    w2 = 1.0 - w1
+    reranker = WeightedReRanker(
+        topn=10,
+        weights={"field1": w1, "field2": w2}
+    )
+    recall = evaluate_recall(reranker, validation_queries)
+    if recall > best_recall:
+        best_recall = recall
+        best_weights = {"field1": w1, "field2": w2}
+```
+
+### 3. Use RRF as Baseline
+
+Start with RrfReRanker, then explore weighted/model-based:
+
+```python
+# Baseline: RRF (no tuning required)
+baseline_results = collection.query(
+    queries=[...],
+    reranker=RrfReRanker(topn=10)
+)
+
+# Compare against weighted
+weighted_results = collection.query(
+    queries=[...],
+    reranker=WeightedReRanker(topn=10, weights={...})
+)
+```
+
+### 4. Combine with Quantization
+
+Use aggressive quantization for fast retrieval, then rerank:
+
+```python
+# Step 1: Fast retrieval with INT8 (top 100)
+# Step 2: Rerank with model-based reranker (top 10)
+results = collection.query(
+    queries=[...],
+    reranker=CrossEncoderReRanker(...),
+    topk=100
+)
+```
+
+## See Also
+
+- [Multi-Vector Queries](/advanced/multi-vector) - Query multiple vector fields
+- [Index Types](/advanced/index-types) - Choose the right index
+- [Performance Tuning](/guides/performance-tuning) - Optimize reranking speed

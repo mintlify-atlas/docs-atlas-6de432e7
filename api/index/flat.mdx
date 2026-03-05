@@ -1,0 +1,284 @@
+---
+title: 'FlatIndexParam'
+description: 'Parameters for configuring flat (brute-force) vector indexes'
+---
+
+## Overview
+
+The `FlatIndexParam` class configures a flat (brute-force) index. A flat index performs exact nearest neighbor search by comparing the query vector against all vectors in the collection. It provides perfect accuracy with a simple implementation, making it ideal for small datasets or as a baseline for accuracy comparison.
+
+## Constructor
+
+```python
+FlatIndexParam(
+    metric_type: MetricType = MetricType.IP,
+    quantize_type: QuantizeType = QuantizeType.UNDEFINED
+)
+```
+
+## Parameters
+
+<ParamField path="metric_type" type="MetricType" default="MetricType.IP">
+  Distance metric used for similarity computation. Options:
+  - `MetricType.IP` - Inner product (default)
+  - `MetricType.L2` - Euclidean distance
+  - `MetricType.COSINE` - Cosine similarity
+</ParamField>
+
+<ParamField path="quantize_type" type="QuantizeType" default="QuantizeType.UNDEFINED">
+  Optional quantization type for vector compression. Options:
+  - `QuantizeType.UNDEFINED` - No quantization (default, perfect accuracy)
+  - `QuantizeType.FP16` - 16-bit floating point (slight accuracy trade-off)
+  - `QuantizeType.INT8` - 8-bit integer quantization (more accuracy trade-off)
+  
+  Quantization can reduce memory usage for flat indexes, but note that this may slightly reduce the exactness of results.
+</ParamField>
+
+## Methods
+
+### to_dict()
+
+Convert the index parameters to a dictionary representation.
+
+**Returns:** `dict` - Dictionary with all index parameter fields.
+
+## Examples
+
+### Basic flat index
+
+```python
+from zvec import FlatIndexParam
+from zvec.typing import MetricType
+
+# Create flat index with default settings
+index_params = FlatIndexParam(
+    metric_type=MetricType.COSINE
+)
+```
+
+### Memory-efficient flat index
+
+```python
+from zvec import FlatIndexParam
+from zvec.typing import MetricType, QuantizeType
+
+# Use FP16 quantization to reduce memory usage
+index_params = FlatIndexParam(
+    metric_type=MetricType.L2,
+    quantize_type=QuantizeType.FP16
+)
+```
+
+### Euclidean distance search
+
+```python
+from zvec import FlatIndexParam
+from zvec.typing import MetricType
+
+# Use L2 (Euclidean) distance
+index_params = FlatIndexParam(
+    metric_type=MetricType.L2
+)
+```
+
+### Using with a collection
+
+```python
+import zvec
+from zvec import FlatIndexParam
+from zvec.typing import MetricType, DataType
+
+# Create a collection with flat index
+collection = zvec.create_collection(
+    path="./my_collection",
+    dimension=768,
+    data_type=DataType.FLOAT32,
+    index_param=FlatIndexParam(
+        metric_type=MetricType.COSINE
+    )
+)
+```
+
+### Baseline accuracy testing
+
+```python
+import zvec
+from zvec import FlatIndexParam, HnswIndexParam
+from zvec.typing import MetricType, DataType
+
+# Create a flat index for baseline accuracy comparison
+flat_collection = zvec.create_collection(
+    path="./flat_baseline",
+    dimension=128,
+    data_type=DataType.FLOAT32,
+    index_param=FlatIndexParam(metric_type=MetricType.COSINE)
+)
+
+# Compare against HNSW index results
+hnsw_collection = zvec.create_collection(
+    path="./hnsw_test",
+    dimension=128,
+    data_type=DataType.FLOAT32,
+    index_param=HnswIndexParam(metric_type=MetricType.COSINE)
+)
+```
+
+## Performance Characteristics
+
+### Time Complexity
+
+- **Search time:** O(n * d)
+  - n = number of vectors in collection
+  - d = dimension of vectors
+- **Index build time:** O(1) - no index structure to build
+- **Insert time:** O(1) - simple append operation
+
+### Space Complexity
+
+- **Memory:** dimension * bytes_per_element * number_of_vectors
+  - FLOAT32: 4 bytes per element
+  - FP16: 2 bytes per element
+  - INT8: 1 byte per element
+
+## When to Use Flat Index
+
+<Check>
+  **Flat index is ideal for:**
+  - Small datasets (under 10,000 vectors)
+  - Scenarios requiring perfect 100% accuracy
+  - Baseline accuracy testing for other index types
+  - Low-dimensional vectors (under 50 dimensions)
+  - Development and debugging
+  - When simplicity is more important than speed
+</Check>
+
+<Warning>
+  **Flat index is NOT recommended for:**
+  - Large datasets (>100,000 vectors) - search becomes too slow
+  - Real-time search requirements with large data
+  - Production deployments with high QPS (queries per second)
+  - High-dimensional vectors with large datasets
+</Warning>
+
+## Comparison with Other Index Types
+
+| Feature | Flat | HNSW | IVF |
+|---------|------|------|-----|
+| **Accuracy** | 100% | 95-99% | 85-95% |
+| **Speed (large dataset)** | Slow | Fast | Fast |
+| **Memory** | Low | High | Medium |
+| **Build time** | Instant | Slow | Medium |
+| **Best for** | Small data | High accuracy | Large data |
+
+## Use Cases
+
+### 1. Baseline Testing
+
+Use flat index to establish ground truth accuracy for comparing approximate indexes:
+
+```python
+# Test HNSW accuracy against flat index baseline
+flat_results = flat_collection.search(query_vector, k=10)
+hnsw_results = hnsw_collection.search(query_vector, k=10)
+
+# Calculate recall
+recall = len(set(flat_results) & set(hnsw_results)) / len(flat_results)
+print(f"HNSW Recall: {recall * 100:.2f}%")
+```
+
+### 2. Small Dataset Search
+
+For datasets with fewer than 10,000 vectors, flat index provides simple and fast enough search:
+
+```python
+import zvec
+from zvec import FlatIndexParam
+from zvec.typing import MetricType
+
+# Small dataset of product embeddings
+products = zvec.create_collection(
+    path="./products",
+    dimension=256,
+    index_param=FlatIndexParam(metric_type=MetricType.COSINE)
+)
+```
+
+### 3. Exact KNN for Verification
+
+When you need to verify or audit search results:
+
+```python
+# Verify top-10 results are exactly correct
+exact_results = flat_collection.search(
+    query_vector,
+    k=10
+)
+```
+
+### 4. Development and Prototyping
+
+Start with flat index during development, then switch to HNSW or IVF for production:
+
+```python
+# Development
+dev_params = FlatIndexParam(metric_type=MetricType.COSINE)
+
+# Production (switch to HNSW)
+from zvec import HnswIndexParam
+prod_params = HnswIndexParam(metric_type=MetricType.COSINE)
+```
+
+## Quantization Trade-offs
+
+<Info>
+  **Using quantization with flat index:**
+  - `FP16`: ~50% memory reduction, minimal accuracy loss
+  - `INT8`: ~75% memory reduction, small accuracy loss
+  - Without quantization: Perfect accuracy, full memory usage
+</Info>
+
+```python
+# Compare quantization options
+full_precision = FlatIndexParam(
+    metric_type=MetricType.COSINE
+)  # 100% accuracy, 4 bytes/element
+
+fp16_quantized = FlatIndexParam(
+    metric_type=MetricType.COSINE,
+    quantize_type=QuantizeType.FP16
+)  # ~99.9% accuracy, 2 bytes/element
+
+int8_quantized = FlatIndexParam(
+    metric_type=MetricType.COSINE,
+    quantize_type=QuantizeType.INT8
+)  # ~98% accuracy, 1 byte/element
+```
+
+## Migration Path
+
+As your dataset grows, consider migrating to approximate indexes:
+
+```python
+# Start: under 10K vectors
+flat = FlatIndexParam(metric_type=MetricType.COSINE)
+
+# Grow: 10K-1M vectors, need speed
+hnsw = HnswIndexParam(
+    metric_type=MetricType.COSINE,
+    m=50,
+    ef_construction=500
+)
+
+# Scale: >1M vectors, need memory efficiency
+ivf = IVFIndexParam(
+    metric_type=MetricType.COSINE,
+    n_list=1000,
+    quantize_type=QuantizeType.INT8
+)
+```
+
+## See Also
+
+- [HnswIndexParam](/api/index/hnsw) - Graph-based approximate index
+- [IVFIndexParam](/api/index/ivf) - Cluster-based approximate index
+- [VectorQuery](/api/query/vector-query) - Querying with flat indexes

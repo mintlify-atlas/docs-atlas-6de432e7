@@ -1,0 +1,272 @@
+---
+title: "FieldSchema"
+description: "Define scalar fields for metadata and filtering"
+---
+
+## Overview
+
+`FieldSchema` represents a scalar (non-vector) field in a collection schema. Scalar fields store metadata like IDs, timestamps, categories, and other structured data that can be used for filtering during queries.
+
+## Constructor
+
+```python
+FieldSchema(
+    name: str,
+    data_type: DataType,
+    nullable: bool = False,
+    index_param: Optional[InvertIndexParam] = None
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" required>
+  Name of the field. Must be unique within the collection.
+</ParamField>
+
+<ParamField path="data_type" type="DataType" required>
+  Data type of the field. Supported scalar types:
+  - **Integers**: `INT32`, `INT64`, `UINT32`, `UINT64`
+  - **Floats**: `FLOAT`, `DOUBLE`
+  - **Text**: `STRING`
+  - **Boolean**: `BOOL`
+  - **Arrays**: `ARRAY_INT32`, `ARRAY_INT64`, `ARRAY_UINT32`, `ARRAY_UINT64`, `ARRAY_FLOAT`, `ARRAY_DOUBLE`, `ARRAY_STRING`, `ARRAY_BOOL`
+</ParamField>
+
+<ParamField path="nullable" type="bool">
+  Whether the field can contain null values. Defaults to `False`.
+</ParamField>
+
+<ParamField path="index_param" type="InvertIndexParam">
+  Inverted index parameters for this field. Used to optimize filtering operations on this field. Only applicable to fields that support indexing. Defaults to `None`.
+</ParamField>
+
+### Raises
+
+- **ValueError**: If `data_type` is not a supported scalar type or if `name` is invalid
+- **TypeError**: If `name` is not a string
+
+## Properties
+
+<ResponseField name="name" type="str">
+  The name of the field (read-only).
+</ResponseField>
+
+<ResponseField name="data_type" type="DataType">
+  The data type of the field (read-only).
+</ResponseField>
+
+<ResponseField name="nullable" type="bool">
+  Whether the field allows null values (read-only).
+</ResponseField>
+
+<ResponseField name="index_param" type="InvertIndexParam | None">
+  Inverted index configuration, if any (read-only).
+</ResponseField>
+
+## Examples
+
+### Basic fields
+
+```python
+from zvec import FieldSchema, DataType
+
+# Integer ID field
+id_field = FieldSchema(
+    name="id",
+    data_type=DataType.INT64
+)
+
+# String field
+title_field = FieldSchema(
+    name="title",
+    data_type=DataType.STRING
+)
+
+# Timestamp field
+timestamp_field = FieldSchema(
+    name="created_at",
+    data_type=DataType.INT64
+)
+```
+
+### Nullable fields
+
+```python
+from zvec import FieldSchema, DataType
+
+# Optional author field
+author_field = FieldSchema(
+    name="author",
+    data_type=DataType.STRING,
+    nullable=True
+)
+
+# Optional description field
+description_field = FieldSchema(
+    name="description",
+    data_type=DataType.STRING,
+    nullable=True
+)
+```
+
+### Fields with indexing
+
+```python
+from zvec import FieldSchema, DataType
+from zvec.model.param import InvertIndexParam
+
+# Indexed field for fast filtering
+category_field = FieldSchema(
+    name="category",
+    data_type=DataType.STRING,
+    index_param=InvertIndexParam(enable_range_optimization=True)
+)
+
+# Indexed integer field
+price_field = FieldSchema(
+    name="price",
+    data_type=DataType.FLOAT,
+    index_param=InvertIndexParam(enable_range_optimization=True)
+)
+```
+
+### Array fields
+
+```python
+from zvec import FieldSchema, DataType
+
+# Array of tags
+tags_field = FieldSchema(
+    name="tags",
+    data_type=DataType.ARRAY_STRING
+)
+
+# Array of ratings
+ratings_field = FieldSchema(
+    name="ratings",
+    data_type=DataType.ARRAY_FLOAT
+)
+
+# Array of related IDs
+related_ids_field = FieldSchema(
+    name="related_ids",
+    data_type=DataType.ARRAY_INT64
+)
+```
+
+### Complete schema with multiple field types
+
+```python
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+from zvec.model.param import InvertIndexParam
+
+schema = CollectionSchema(
+    name="articles",
+    fields=[
+        # Required ID
+        FieldSchema("article_id", DataType.STRING),
+        
+        # Metadata
+        FieldSchema("title", DataType.STRING),
+        FieldSchema("author", DataType.STRING, nullable=True),
+        FieldSchema("published_at", DataType.INT64),
+        
+        # Indexed fields for filtering
+        FieldSchema(
+            "category",
+            DataType.STRING,
+            index_param=InvertIndexParam()
+        ),
+        FieldSchema(
+            "view_count",
+            DataType.INT32,
+            index_param=InvertIndexParam(enable_range_optimization=True)
+        ),
+        
+        # Array fields
+        FieldSchema("tags", DataType.ARRAY_STRING),
+        FieldSchema("related_ids", DataType.ARRAY_STRING)
+    ],
+    vectors=VectorSchema(
+        "content_embedding",
+        DataType.VECTOR_FP32,
+        dimension=768
+    )
+)
+```
+
+### Numeric types
+
+```python
+from zvec import FieldSchema, DataType
+
+# Signed integers
+int32_field = FieldSchema("small_count", DataType.INT32)      # -2^31 to 2^31-1
+int64_field = FieldSchema("large_count", DataType.INT64)      # -2^63 to 2^63-1
+
+# Unsigned integers
+uint32_field = FieldSchema("positive_id", DataType.UINT32)    # 0 to 2^32-1
+uint64_field = FieldSchema("large_id", DataType.UINT64)       # 0 to 2^64-1
+
+# Floating point
+float_field = FieldSchema("price", DataType.FLOAT)            # 32-bit float
+double_field = FieldSchema("precise_value", DataType.DOUBLE)  # 64-bit float
+```
+
+### Using fields in queries
+
+```python
+import zvec
+
+# Create collection with indexed fields
+schema = zvec.CollectionSchema(
+    name="products",
+    fields=[
+        zvec.FieldSchema("product_id", zvec.DataType.STRING),
+        zvec.FieldSchema(
+            "category",
+            zvec.DataType.STRING,
+            index_param=zvec.InvertIndexParam()
+        ),
+        zvec.FieldSchema(
+            "price",
+            zvec.DataType.FLOAT,
+            index_param=zvec.InvertIndexParam(enable_range_optimization=True)
+        )
+    ],
+    vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP32, 128)
+)
+
+collection = zvec.create_and_open("./products_db", schema)
+
+# Query with field filters
+results = collection.query(
+    zvec.VectorQuery("embedding", vector=[...]),
+    filter="category == 'electronics' AND price < 100.0",
+    topk=10
+)
+```
+
+## Field Type Selection Guide
+
+| Use Case | Recommended Type | Notes |
+|----------|------------------|-------|
+| Document IDs | `STRING` or `INT64` | Use `STRING` for UUIDs |
+| Timestamps | `INT64` | Unix timestamp in seconds/milliseconds |
+| Categories | `STRING` | Add `InvertIndexParam` for filtering |
+| Tags | `ARRAY_STRING` | Multiple values per document |
+| Prices | `FLOAT` | Use `DOUBLE` for high precision |
+| Counts | `INT32` or `INT64` | Use `UINT*` if always positive |
+| Flags | `BOOL` | True/false values |
+
+<Tip>
+Add `InvertIndexParam` to fields you frequently filter on to improve query performance.
+</Tip>
+
+## See Also
+
+- [CollectionSchema](/api/schema/collection-schema) - Define complete collection structure
+- [DataType](/api/schema/data-types) - All available data types
+- [InvertIndexParam](/api/index/inverted) - Inverted index configuration
+- [Filtering Guide](/guides/filtering) - Using field filters in queries

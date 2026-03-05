@@ -1,97 +1,289 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Zvec Documentation"
+description: "Lightning-fast, in-process vector database built on Alibaba's Proxima engine"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative py-20 overflow-hidden dark:bg-[#0f1117] bg-white">
+  <div className="absolute inset-0 dark:bg-gradient-to-br dark:from-[#6165fc]/10 dark:via-transparent dark:to-[#4204fc]/5 bg-gradient-to-br from-[#6165fc]/5 via-transparent to-[#4204fc]/3"></div>
+  <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
+    <div className="grid lg:grid-cols-2 gap-12 items-center">
+      <div>
+        <h1 className="text-5xl lg:text-6xl font-bold dark:text-white text-gray-900 mb-6">
+          Lightning-Fast Vector Search
+        </h1>
+        <p className="text-lg lg:text-xl dark:text-gray-300 text-gray-600 mb-8 max-w-2xl">
+          Build powerful semantic search and RAG applications with Zvec — an in-process vector database that delivers production-grade performance with zero infrastructure overhead.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-[#6165fc] hover:bg-[#4204fc] text-white font-semibold transition-colors no-underline"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a 
+            href="/api/init" 
+            className="inline-flex items-center px-6 py-3 rounded-lg dark:border-gray-700 dark:bg-[#1a1d27] dark:hover:bg-[#242838] border border-gray-300 bg-white hover:bg-gray-50 dark:text-white text-gray-900 font-semibold transition-colors no-underline"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block">
+        <div className="dark:bg-[#1a1d27] bg-gray-50 rounded-2xl p-6 dark:border-[#27272a] border border-gray-200">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+          </div>
+```python quickstart.py
+import zvec
 
-Get your documentation site up and running in minutes.
+# Define schema
+schema = zvec.CollectionSchema(
+    name="documents",
+    vectors=zvec.VectorSchema(
+        "embedding", 
+        zvec.DataType.VECTOR_FP32, 
+        384
+    )
+)
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+# Create collection
+collection = zvec.create_and_open(
+    path="./my_db", 
+    schema=schema
+)
 
-## Make it yours
+# Insert vectors
+collection.insert([
+    zvec.Doc(
+        id="doc_1",
+        vectors={"embedding": [0.1, 0.2, ...]}
+    )
+])
 
-Design a docs site that looks great and empowers your users.
+# Query by similarity
+results = collection.query(
+    zvec.VectorQuery("embedding", vector=[...]),
+    topk=10
+)
+```
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Quick Start</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Get up and running with Zvec in minutes</p>
+  
+  <Steps>
+    <Step title="Install Zvec">
+      Install the package using your preferred package manager.
+      
+      <CodeGroup>
+      ```bash pip
+      pip install zvec
+      ```
+      
+      ```bash npm
+      npm install @zvec/zvec
+      ```
+      </CodeGroup>
+      
+      <Note>Zvec supports Python 3.10-3.12 and Node.js on Linux (x86_64, ARM64) and macOS (ARM64).</Note>
+    </Step>
+    
+    <Step title="Define your schema">
+      Create a collection schema that defines your vector dimensions and data structure.
+      
+```python
+import zvec
 
-## Create beautiful pages
+schema = zvec.CollectionSchema(
+    name="my_collection",
+    vectors=zvec.VectorSchema(
+        "embedding",
+        zvec.DataType.VECTOR_FP32,
+        dimension=384
+    )
+)
+```
+    </Step>
+    
+    <Step title="Create and query">
+      Open your collection, insert documents with vectors, and query by similarity.
+      
+```python
+# Create and open collection
+collection = zvec.create_and_open(
+    path="./zvec_data",
+    schema=schema
+)
 
-Everything you need to create world-class documentation.
+# Insert documents
+collection.insert([
+    zvec.Doc(
+        id="doc_1",
+        vectors={"embedding": [0.1, 0.2, 0.3, ...]}
+    )
+])
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+# Search by vector similarity
+results = collection.query(
+    zvec.VectorQuery("embedding", vector=[0.4, 0.3, 0.2, ...]),
+    topk=10
+)
 
-## Need inspiration?
+print(results)  # [{'id': 'doc_1', 'score': 0.95, ...}]
+```
+      
+      <Tip>Results are automatically sorted by relevance score in descending order.</Tip>
+    </Step>
+  </Steps>
+</div>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Core Features</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Everything you need for production vector search</p>
+  
+  <CardGroup cols={3}>
+    <Card title="In-Process Database" icon="bolt" href="/concepts/collections">
+      No servers, no config. Embeds directly into your application for minimal latency and maximum simplicity.
+    </Card>
+    <Card title="Multiple Index Types" icon="layer-group" href="/advanced/index-types">
+      Choose from HNSW, IVF, or Flat indexes optimized for different data scales and query patterns.
+    </Card>
+    <Card title="Dense & Sparse Vectors" icon="grid" href="/concepts/vectors">
+      Support for both dense embeddings and sparse vectors with multi-vector queries in a single call.
+    </Card>
+    <Card title="Hybrid Search" icon="magnifying-glass" href="/guides/hybrid-search">
+      Combine semantic similarity with structured filters for precise, context-aware results.
+    </Card>
+    <Card title="Built-in Embeddings" icon="plug" href="/guides/embeddings">
+      Native integrations for OpenAI, Qwen, SentenceTransformers, and BM25 embedding functions.
+    </Card>
+    <Card title="Production Performance" icon="rocket" href="/resources/benchmarks">
+      Powered by Alibaba's battle-tested Proxima engine. Search billions of vectors in milliseconds.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Explore by Topic</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Deep dive into specific areas of Zvec</p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="/concepts/collections" className="group block rounded-2xl dark:border-[#27272a] dark:hover:border-[#6165fc] border border-gray-200 hover:border-[#6165fc] overflow-hidden transition-colors no-underline">
+      <div className="h-48 dark:bg-gradient-to-br dark:from-[#6165fc]/20 dark:to-[#4204fc]/10 bg-gradient-to-br from-[#6165fc]/10 to-[#4204fc]/5 flex items-center justify-center">
+        <svg className="w-20 h-20 dark:text-[#6165fc] text-[#6165fc]/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z M12 12h.01" />
+        </svg>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Core Concepts</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">Learn about collections, schemas, vectors, indexing, and querying fundamentals.</p>
+        <div className="flex items-center text-sm dark:text-[#6165fc] text-[#6165fc] dark:group-hover:text-[#4204fc] group-hover:text-[#4204fc] font-medium">
+          Explore concepts
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/guides/dense-vectors" className="group block rounded-2xl dark:border-[#27272a] dark:hover:border-[#6165fc] border border-gray-200 hover:border-[#6165fc] overflow-hidden transition-colors no-underline">
+      <div className="h-48 dark:bg-gradient-to-br dark:from-purple-500/20 dark:to-pink-500/10 bg-gradient-to-br from-purple-500/10 to-pink-500/5 flex items-center justify-center">
+        <svg className="w-20 h-20 dark:text-purple-400 text-purple-500/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Practical Guides</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">Step-by-step guides for dense vectors, sparse vectors, hybrid search, and performance tuning.</p>
+        <div className="flex items-center text-sm dark:text-[#6165fc] text-[#6165fc] dark:group-hover:text-[#4204fc] group-hover:text-[#4204fc] font-medium">
+          View guides
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/integrations/openai" className="group block rounded-2xl dark:border-[#27272a] dark:hover:border-[#6165fc] border border-gray-200 hover:border-[#6165fc] overflow-hidden transition-colors no-underline">
+      <div className="h-48 dark:bg-gradient-to-br dark:from-green-500/20 dark:to-teal-500/10 bg-gradient-to-br from-green-500/10 to-teal-500/5 flex items-center justify-center">
+        <svg className="w-20 h-20 dark:text-green-400 text-green-500/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+        </svg>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">Integrations</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">Connect with OpenAI, Qwen, SentenceTransformers, and BM25 for seamless embeddings.</p>
+        <div className="flex items-center text-sm dark:text-[#6165fc] text-[#6165fc] dark:group-hover:text-[#4204fc] group-hover:text-[#4204fc] font-medium">
+          Browse integrations
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/api/init" className="group block rounded-2xl dark:border-[#27272a] dark:hover:border-[#6165fc] border border-gray-200 hover:border-[#6165fc] overflow-hidden transition-colors no-underline">
+      <div className="h-48 dark:bg-gradient-to-br dark:from-orange-500/20 dark:to-red-500/10 bg-gradient-to-br from-orange-500/10 to-red-500/5 flex items-center justify-center">
+        <svg className="w-20 h-20 dark:text-orange-400 text-orange-500/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        </svg>
+      </div>
+      <div className="p-6 dark:bg-[#1a1d27] bg-white">
+        <h3 className="text-base font-semibold dark:text-white text-gray-900 mb-2">API Reference</h3>
+        <p className="text-sm dark:text-gray-400 text-gray-600 mb-3">Complete API documentation with detailed parameter descriptions and type signatures.</p>
+        <div className="flex items-center text-sm dark:text-[#6165fc] text-[#6165fc] dark:group-hover:text-[#4204fc] group-hover:text-[#4204fc] font-medium">
+          Explore API
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold dark:text-white text-gray-900 mb-4">Community & Support</h2>
+  <p className="text-base dark:text-gray-400 text-gray-600 mb-8">Get help and connect with other Zvec users</p>
+  
+  <CardGroup cols={2}>
+    <Card title="GitHub Discussions" icon="github" href="https://github.com/alibaba/zvec/discussions">
+      Ask questions, share ideas, and collaborate with the community on GitHub.
+    </Card>
+    <Card title="Discord Community" icon="discord" href="https://discord.gg/rKddFBBu9z">
+      Join our Discord server for real-time chat and support from the team.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="dark:bg-gradient-to-r dark:from-[#6165fc]/10 dark:to-[#4204fc]/10 bg-gradient-to-r from-[#6165fc]/5 to-[#4204fc]/5 rounded-2xl p-8 md:p-12 text-center dark:border-[#27272a] border border-gray-200">
+    <h2 className="text-2xl md:text-3xl font-bold dark:text-white text-gray-900 mb-4">
+      Ready to Build?
+    </h2>
+    <p className="text-base md:text-lg dark:text-gray-300 text-gray-600 mb-6 max-w-2xl mx-auto">
+      Start building powerful vector search applications with Zvec today. No servers, no complexity — just fast, reliable vector search.
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 rounded-lg bg-[#6165fc] hover:bg-[#4204fc] text-white font-semibold transition-colors no-underline"
+    >
+      Get Started Now
+      <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+    </a>
+  </div>
+</div>

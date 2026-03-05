@@ -1,0 +1,539 @@
+---
+title: Multi-Vector Queries
+description: Search across multiple vector fields with result fusion strategies
+---
+
+Multi-vector queries enable searching across multiple vector fields in a single request, with automatic result fusion. This is essential for multi-modal search, hybrid retrieval, and domain-specific applications.
+
+## Overview
+
+Zvec supports querying multiple vector fields simultaneously:
+
+- **Text + Image**: Multi-modal search
+- **Dense + Sparse**: Hybrid retrieval (semantic + keyword)
+- **Domain-specific**: Title, content, metadata embeddings
+- **Cross-lingual**: Different language embeddings
+
+## Basic Multi-Vector Query
+
+### Schema Definition
+
+Define a collection with multiple vector fields:
+
+```python
+import zvec
+from zvec.typing import DataType, MetricType
+
+schema = zvec.CollectionSchema(
+    name="multi_vector_collection",
+    vectors=[
+        # Dense text embedding (semantic)
+        zvec.VectorSchema(
+            "text_dense",
+            DataType.VECTOR_FP32,
+            dimension=384,
+            index_param=zvec.HnswIndexParam(
+                metric_type=MetricType.COSINE,
+                m=32,
+                ef_construction=400
+            )
+        ),
+        # Sparse text embedding (keyword)
+        zvec.VectorSchema(
+            "text_sparse",
+            DataType.SPARSE_VECTOR_FP32,
+            dimension=30000,
+            index_param=zvec.FlatIndexParam(
+                metric_type=MetricType.IP
+            )
+        ),
+        # Image embedding
+        zvec.VectorSchema(
+            "image_embedding",
+            DataType.VECTOR_FP32,
+            dimension=512,
+            index_param=zvec.HnswIndexParam(
+                metric_type=MetricType.L2
+            )
+        )
+    ],
+    fields=[
+        zvec.FieldSchema("title", DataType.STRING),
+        zvec.FieldSchema("url", DataType.STRING)
+    ]
+)
+
+collection = zvec.create_and_open("./multi_vector_data", schema)
+```
+
+### Inserting Multi-Vector Documents
+
+```python
+collection.insert([
+    zvec.Doc(
+        id="doc_1",
+        vectors={
+            "text_dense": [0.1, 0.2, 0.3, ...],      # Dense embedding
+            "text_sparse": {0: 0.5, 10: 0.8, ...},   # Sparse {index: value}
+            "image_embedding": [0.4, 0.5, 0.6, ...]  # Image features
+        },
+        fields={
+            "title": "Vector search tutorial",
+            "url": "https://example.com/doc1"
+        }
+    ),
+    zvec.Doc(
+        id="doc_2",
+        vectors={
+            "text_dense": [0.2, 0.3, 0.4, ...],
+            "text_sparse": {5: 0.6, 15: 0.9, ...},
+            "image_embedding": [0.5, 0.6, 0.7, ...]
+        },
+        fields={
+            "title": "Image search with embeddings",
+            "url": "https://example.com/doc2"
+        }
+    )
+])
+```
+
+### Querying Multiple Fields
+
+```python
+from zvec.extension.multi_vector_reranker import RrfReRanker
+
+# Query all three vector fields
+results = collection.query(
+    queries=[
+        zvec.VectorQuery(
+            "text_dense",
+            vector=[0.15, 0.25, 0.35, ...],
+            param=zvec.HnswQueryParam(ef=300)
+        ),
+        zvec.VectorQuery(
+            "text_sparse",
+            vector={0: 0.55, 10: 0.85, ...}  # Sparse query
+        ),
+        zvec.VectorQuery(
+            "image_embedding",
+            vector=[0.45, 0.55, 0.65, ...]
+        )
+    ],
+    reranker=RrfReRanker(topn=10, rank_constant=60),
+    topk=100  # Fetch top 100 from each field, then rerank to 10
+)
+
+for doc in results:
+    print(f"ID: {doc.id}, Score: {doc.score}, Title: {doc.fields['title']}")
+```
+
+## Use Cases
+
+### 1. Multi-Modal Search (Text + Image)
+
+Search products using both text description and image:
+
+```python
+import zvec
+from zvec.typing import DataType
+from zvec.extension.multi_vector_reranker import WeightedReRanker
+
+# Schema for e-commerce products
+schema = zvec.CollectionSchema(
+    name="products",
+    vectors=[
+        zvec.VectorSchema("title_embedding", DataType.VECTOR_FP32, 384),
+        zvec.VectorSchema("image_embedding", DataType.VECTOR_FP32, 2048)
+    ],
+    fields=[
+        zvec.FieldSchema("product_name", DataType.STRING),
+        zvec.FieldSchema("price", DataType.FLOAT)
+    ]
+)
+
+collection = zvec.create_and_open("./products", schema)
+
+# Query: "red running shoes" + uploaded image
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("title_embedding", vector=text_encoder("red running shoes")),
+        zvec.VectorQuery("image_embedding", vector=image_encoder(uploaded_image))
+    ],
+    reranker=WeightedReRanker(
+        topn=10,
+        weights={
+            "title_embedding": 0.4,  # 40% text
+            "image_embedding": 0.6   # 60% image
+        }
+    ),
+    topk=100
+)
+```
+
+### 2. Hybrid Retrieval (Dense + Sparse)
+
+Combine semantic search with keyword matching:
+
+```python
+import zvec
+from zvec.typing import DataType, MetricType
+from zvec.extension.multi_vector_reranker import RrfReRanker
+
+# Schema with dense and sparse vectors
+schema = zvec.CollectionSchema(
+    name="hybrid_search",
+    vectors=[
+        # Dense: Semantic similarity (BERT, SBERT, etc.)
+        zvec.VectorSchema(
+            "dense_embedding",
+            DataType.VECTOR_FP32,
+            dimension=768,
+            index_param=zvec.HnswIndexParam(metric_type=MetricType.COSINE)
+        ),
+        # Sparse: Keyword matching (BM25, SPLADE, etc.)
+        zvec.VectorSchema(
+            "sparse_embedding",
+            DataType.SPARSE_VECTOR_FP32,
+            dimension=30522,  # Vocabulary size
+            index_param=zvec.FlatIndexParam(metric_type=MetricType.IP)
+        )
+    ]
+)
+
+collection = zvec.create_and_open("./hybrid_data", schema)
+
+# Query with both dense and sparse
+query_text = "machine learning algorithms"
+
+results = collection.query(
+    queries=[
+        zvec.VectorQuery(
+            "dense_embedding",
+            vector=bert_encoder(query_text)  # Semantic
+        ),
+        zvec.VectorQuery(
+            "sparse_embedding",
+            vector=bm25_encoder(query_text)  # Keyword
+        )
+    ],
+    reranker=RrfReRanker(topn=10),  # RRF handles different score ranges well
+    topk=100
+)
+```
+
+### 3. Hierarchical Embeddings
+
+Search with title, content, and metadata embeddings:
+
+```python
+import zvec
+from zvec.typing import DataType
+from zvec.extension.multi_vector_reranker import WeightedReRanker
+
+schema = zvec.CollectionSchema(
+    name="documents",
+    vectors=[
+        zvec.VectorSchema("title_embedding", DataType.VECTOR_FP32, 384),
+        zvec.VectorSchema("content_embedding", DataType.VECTOR_FP32, 768),
+        zvec.VectorSchema("metadata_embedding", DataType.VECTOR_FP32, 128)
+    ]
+)
+
+collection = zvec.create_and_open("./documents", schema)
+
+# Query with hierarchical weights
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("title_embedding", vector=encode_title(query)),
+        zvec.VectorQuery("content_embedding", vector=encode_content(query)),
+        zvec.VectorQuery("metadata_embedding", vector=encode_metadata(query))
+    ],
+    reranker=WeightedReRanker(
+        topn=10,
+        weights={
+            "title_embedding": 0.5,      # Title most important
+            "content_embedding": 0.4,    # Content second
+            "metadata_embedding": 0.1    # Metadata least
+        }
+    ),
+    topk=100
+)
+```
+
+### 4. Cross-Lingual Search
+
+Search across multiple language embeddings:
+
+```python
+import zvec
+from zvec.typing import DataType
+from zvec.extension.multi_vector_reranker import RrfReRanker
+
+schema = zvec.CollectionSchema(
+    name="multilingual",
+    vectors=[
+        zvec.VectorSchema("en_embedding", DataType.VECTOR_FP32, 768),
+        zvec.VectorSchema("zh_embedding", DataType.VECTOR_FP32, 768),
+        zvec.VectorSchema("es_embedding", DataType.VECTOR_FP32, 768)
+    ]
+)
+
+collection = zvec.create_and_open("./multilingual", schema)
+
+# Query in English, retrieve from all languages
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("en_embedding", vector=en_encoder("vector database")),
+        zvec.VectorQuery("zh_embedding", vector=zh_encoder("向量数据库")),
+        zvec.VectorQuery("es_embedding", vector=es_encoder("base de datos vectorial"))
+    ],
+    reranker=RrfReRanker(topn=10),
+    topk=100
+)
+```
+
+## Result Fusion Strategies
+
+Zvec provides multiple strategies for combining results from different vector fields:
+
+### 1. Reciprocal Rank Fusion (RRF)
+
+**Best for:** Multi-modal search, hybrid retrieval
+
+```python
+from zvec.extension.multi_vector_reranker import RrfReRanker
+
+reranker = RrfReRanker(
+    topn=10,
+    rank_constant=60  # Higher = less emphasis on rank position
+)
+
+results = collection.query(
+    queries=[...],
+    reranker=reranker,
+    topk=100
+)
+```
+
+**Advantages:**
+- No score normalization required
+- Robust across different embedding types
+- Simple, no hyperparameters to tune
+
+**Formula:**
+```
+RRF_score(doc) = Σ [1 / (k + rank_i + 1)]
+```
+
+Where `rank_i` is the document's rank in result list `i`.
+
+### 2. Weighted Score Fusion
+
+**Best for:** Known field importance, domain-specific weighting
+
+```python
+from zvec.extension.multi_vector_reranker import WeightedReRanker
+from zvec.typing import MetricType
+
+reranker = WeightedReRanker(
+    topn=10,
+    metric=MetricType.COSINE,
+    weights={
+        "field1": 0.6,
+        "field2": 0.3,
+        "field3": 0.1
+    }
+)
+
+results = collection.query(
+    queries=[...],
+    reranker=reranker,
+    topk=100
+)
+```
+
+**Advantages:**
+- Fine-grained control over field importance
+- Score-aware (uses actual relevance scores)
+
+**Formula:**
+```
+Weighted_score(doc) = Σ [normalize(score_i) * weight_i]
+```
+
+### 3. Custom Fusion
+
+Implement domain-specific fusion logic:
+
+```python
+from zvec.extension.rerank_function import RerankFunction
+from zvec.model.doc import Doc
+
+class CustomReRanker(RerankFunction):
+    def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]:
+        # Custom fusion logic
+        all_docs = {}
+        
+        for field_name, docs in query_results.items():
+            for rank, doc in enumerate(docs):
+                if doc.id not in all_docs:
+                    all_docs[doc.id] = {"doc": doc, "scores": {}}
+                
+                # Custom scoring: boost recent documents
+                recency_boost = 1.0
+                if "timestamp" in doc.fields:
+                    days_old = (datetime.now() - doc.fields["timestamp"]).days
+                    recency_boost = 1.0 / (1.0 + days_old / 365)
+                
+                all_docs[doc.id]["scores"][field_name] = doc.score * recency_boost
+        
+        # Combine scores
+        final_scores = []
+        for doc_id, data in all_docs.items():
+            combined_score = sum(data["scores"].values()) / len(data["scores"])
+            final_scores.append((data["doc"], combined_score))
+        
+        # Sort and return topn
+        final_scores.sort(key=lambda x: x[1], reverse=True)
+        return [doc._replace(score=score) for doc, score in final_scores[:self.topn]]
+
+# Use custom reranker
+results = collection.query(
+    queries=[...],
+    reranker=CustomReRanker(topn=10),
+    topk=100
+)
+```
+
+## Query Construction
+
+### Per-Field Query Parameters
+
+Specify different query parameters for each vector field:
+
+```python
+results = collection.query(
+    queries=[
+        zvec.VectorQuery(
+            "dense_embedding",
+            vector=dense_vec,
+            param=zvec.HnswQueryParam(ef=500)  # Higher recall for dense
+        ),
+        zvec.VectorQuery(
+            "sparse_embedding",
+            vector=sparse_vec,
+            param=zvec.HnswQueryParam(ef=100)  # Lower for sparse
+        )
+    ],
+    reranker=RrfReRanker(topn=10),
+    topk=100
+)
+```
+
+### Query by ID
+
+Use existing document as query:
+
+```python
+# Find documents similar to doc_123 across all fields
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("text_dense", id="doc_123"),
+        zvec.VectorQuery("text_sparse", id="doc_123"),
+        zvec.VectorQuery("image_embedding", id="doc_123")
+    ],
+    reranker=RrfReRanker(topn=10),
+    topk=100
+)
+```
+
+### Filtering with Multi-Vector Queries
+
+Combine multi-vector search with filters:
+
+```python
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("title_embedding", vector=title_vec),
+        zvec.VectorQuery("content_embedding", vector=content_vec)
+    ],
+    filter="category = 'electronics' AND price < 1000",
+    reranker=WeightedReRanker(
+        topn=10,
+        weights={"title_embedding": 0.6, "content_embedding": 0.4}
+    ),
+    topk=100
+)
+```
+
+## Performance Considerations
+
+### 1. Over-Fetching
+
+Fetch more candidates than needed for effective reranking:
+
+```python
+# Good: Fetch 100, rerank to 10
+results = collection.query(
+    queries=[...],
+    reranker=RrfReRanker(topn=10),
+    topk=100  # 10x over-fetch
+)
+
+# Bad: Fetch 10, rerank to 10 (no room for fusion)
+results = collection.query(
+    queries=[...],
+    reranker=RrfReRanker(topn=10),
+    topk=10  # Not enough candidates
+)
+```
+
+### 2. Field Selection
+
+Only query fields that are relevant:
+
+```python
+# If query is text-only, don't query image field
+if query_type == "text":
+    queries = [
+        zvec.VectorQuery("text_dense", vector=text_vec),
+        zvec.VectorQuery("text_sparse", vector=sparse_vec)
+    ]
+else:  # Image query
+    queries = [
+        zvec.VectorQuery("image_embedding", vector=image_vec)
+    ]
+
+results = collection.query(queries=queries, reranker=..., topk=100)
+```
+
+### 3. Parallel Execution
+
+Zvec executes multi-vector queries in parallel internally:
+
+```python
+# These queries run concurrently
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("field1", vector=vec1),  # Executes in parallel
+        zvec.VectorQuery("field2", vector=vec2),  # Executes in parallel
+        zvec.VectorQuery("field3", vector=vec3)   # Executes in parallel
+    ],
+    reranker=RrfReRanker(topn=10),
+    topk=100
+)
+```
+
+## Best Practices
+
+1. **Start with RRF**: Use RrfReRanker as baseline, then tune weights if needed
+2. **Over-fetch 5-10x**: Fetch 5-10x more candidates than final topk
+3. **Tune weights on validation data**: Use A/B testing or grid search
+4. **Monitor per-field performance**: Track which fields contribute most
+5. **Use appropriate metrics**: COSINE for normalized, L2 for absolute distances
+
+## See Also
+
+- [Reranking](/advanced/reranking) - Detailed reranking strategies
+- [Index Types](/advanced/index-types) - Choose the right index for each field
+- [Hybrid Search Guide](/guides/hybrid-search) - Dense + sparse retrieval examples

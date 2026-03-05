@@ -1,0 +1,488 @@
+---
+title: "FAQ"
+description: "Frequently asked questions about Zvec"
+icon: "question"
+---
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="What is Zvec?">
+    Zvec is an open-source, in-process vector database built on Alibaba's Proxima search engine. It's designed to embed directly into applications, providing fast similarity search without requiring a separate server process.
+    
+    Key features:
+    - Lightweight and embeddable
+    - Supports both dense and sparse vectors
+    - Built-in hybrid search capabilities
+    - Production-grade performance
+  </Accordion>
+
+  <Accordion title="How is Zvec different from other vector databases?">
+    Zvec is an **in-process** database, meaning it runs directly within your application rather than as a separate service. This provides:
+    
+    - **Zero network latency** - No client-server communication overhead
+    - **Simple deployment** - No server infrastructure to manage
+    - **Edge compatibility** - Runs on laptops, IoT devices, or servers
+    - **Fast startup** - Instant initialization, no warm-up time
+    
+    It's ideal for applications like notebooks, CLI tools, edge devices, and single-node services.
+  </Accordion>
+
+  <Accordion title="What programming languages does Zvec support?">
+    Currently, Zvec supports:
+    - **Python** (3.10, 3.11, 3.12) - via PyPI: `pip install zvec`
+    - **Node.js** - via npm: `npm install @zvec/zvec`
+    - **C++** - Build from source
+    
+    Bindings for additional languages are planned for future releases.
+  </Accordion>
+
+  <Accordion title="Is Zvec production-ready?">
+    Yes! Zvec is built on **Proxima**, Alibaba's battle-tested vector search engine used in production at scale. It inherits Proxima's reliability, performance optimizations, and production-hardened code.
+    
+    However, as with any database, thoroughly test with your specific workload before deploying to production.
+  </Accordion>
+
+  <Accordion title="What license is Zvec released under?">
+    Zvec is released under the **Apache 2.0 License**, which allows for both commercial and non-commercial use. See the [LICENSE](https://github.com/alibaba/zvec/blob/main/LICENSE) file for details.
+  </Accordion>
+</AccordionGroup>
+
+## Installation
+
+<AccordionGroup>
+  <Accordion title="What platforms are supported?">
+    Zvec currently supports:
+    - **Linux**: x86_64 (AMD64), ARM64 (aarch64)
+    - **macOS**: ARM64 (Apple Silicon)
+    
+    <Warning>
+      macOS x86_64 (Intel) and Windows support are not currently available but may be added in future releases.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Why am I getting import errors after installing zvec?">
+    Common causes:
+    
+    1. **Python version mismatch** - Zvec requires Python 3.10-3.12
+       ```bash
+       python --version  # Check your version
+       ```
+    
+    2. **Platform incompatibility** - Verify you're on a supported platform
+       ```bash
+       uname -m  # Should show x86_64 or aarch64
+       ```
+    
+    3. **Corrupted installation** - Try reinstalling:
+       ```bash
+       pip uninstall zvec
+       pip install --no-cache-dir zvec
+       ```
+  </Accordion>
+
+  <Accordion title="How do I build Zvec from source?">
+    Prerequisites:
+    - CMake ≥ 3.26, < 4.0
+    - C++17-compatible compiler (g++-11+, clang++)
+    - Python 3.10-3.12
+    
+    Build steps:
+    ```bash
+    git clone --recursive https://github.com/alibaba/zvec.git
+    cd zvec
+    pip install -e ".[dev]"
+    ```
+    
+    See the [Building from Source guide](/advanced/building-from-source) for detailed instructions.
+  </Accordion>
+
+  <Accordion title="Can I use Zvec with virtual environments?">
+    Yes, Zvec works perfectly with virtual environments (venv, conda, poetry, etc.):
+    
+    ```bash
+    # Using venv
+    python -m venv myenv
+    source myenv/bin/activate
+    pip install zvec
+    
+    # Using conda
+    conda create -n myenv python=3.11
+    conda activate myenv
+    pip install zvec
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Data and Schema
+
+<AccordionGroup>
+  <Accordion title="What vector types does Zvec support?">
+    Zvec supports multiple vector data types:
+    
+    **Dense vectors:**
+    - `VECTOR_FP32` - 32-bit float (most common)
+    - `VECTOR_FP64` - 64-bit double
+    - `VECTOR_FP16` - 16-bit half-precision float
+    - `VECTOR_INT8` - 8-bit integer (quantized)
+    - `VECTOR_INT16` - 16-bit integer
+    - `VECTOR_BINARY32/64` - Binary vectors
+    
+    **Sparse vectors:**
+    - `SPARSE_VECTOR_FP32` - 32-bit sparse vectors
+    - `SPARSE_VECTOR_FP16` - 16-bit sparse vectors
+    
+    See [Vector Types documentation](/concepts/vectors) for details.
+  </Accordion>
+
+  <Accordion title="Can I store metadata alongside vectors?">
+    Yes! Zvec supports structured metadata fields:
+    
+    ```python
+    schema = zvec.CollectionSchema(
+        name="docs",
+        vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP32, 768),
+        fields=[
+            zvec.FieldSchema("title", zvec.DataType.STRING),
+            zvec.FieldSchema("timestamp", zvec.DataType.INT64),
+            zvec.FieldSchema("category", zvec.DataType.STRING),
+            zvec.FieldSchema("price", zvec.DataType.FLOAT),
+        ]
+    )
+    ```
+    
+    Supported field types include: STRING, INT32, INT64, UINT32, UINT64, FLOAT, DOUBLE, BOOL, BINARY, and array variants.
+  </Accordion>
+
+  <Accordion title="How do I change the schema after creating a collection?">
+    Schema changes are **not supported** after collection creation. If you need to modify the schema:
+    
+    1. Create a new collection with the updated schema
+    2. Migrate data from the old collection to the new one
+    3. Delete the old collection
+    
+    ```python
+    # Create new collection
+    new_collection = zvec.create_and_open("./new_db", new_schema)
+    
+    # Migrate data
+    old_collection = zvec.open("./old_db")
+    for doc in old_collection.scan():
+        new_collection.insert([doc])
+    ```
+    
+    <Tip>Plan your schema carefully before ingesting large amounts of data.</Tip>
+  </Accordion>
+
+  <Accordion title="What's the maximum vector dimension?">
+    There's no hard limit on vector dimensions, but practical considerations:
+    
+    - **Performance**: Higher dimensions = slower search and more memory
+    - **Storage**: Disk usage scales linearly with dimension
+    - **Typical range**: Most embeddings are 128-1536 dimensions
+    
+    Common embedding dimensions:
+    - OpenAI `text-embedding-3-small`: 1536
+    - Sentence Transformers: 384-768
+    - Custom models: Varies
+  </Accordion>
+
+  <Accordion title="Can I have multiple vector fields in one collection?">
+    Yes! Multi-vector collections are fully supported:
+    
+    ```python
+    schema = zvec.CollectionSchema(
+        name="multi_vector",
+        vectors=[
+            zvec.VectorSchema("dense", zvec.DataType.VECTOR_FP32, 384),
+            zvec.VectorSchema("sparse", zvec.DataType.SPARSE_VECTOR_FP32, 0),
+        ]
+    )
+    ```
+    
+    This enables hybrid search strategies combining different vector types.
+  </Accordion>
+</AccordionGroup>
+
+## Performance
+
+<AccordionGroup>
+  <Accordion title="Which index type should I use?">
+    Index selection depends on your use case:
+    
+    | Index | Best For | Pros | Cons |
+    |-------|----------|------|------|
+    | **HNSW** | Most use cases | Fast, accurate | Higher memory |
+    | **IVF** | Large datasets | Memory efficient | Slower queries |
+    | **Flat** | Small datasets or exact search | 100% recall | No indexing |
+    
+    **Recommendation**: Start with HNSW for optimal speed and accuracy.
+  </Accordion>
+
+  <Accordion title="How can I improve query performance?">
+    Key optimization strategies:
+    
+    1. **Tune index parameters**:
+       ```python
+       # HNSW: Increase ef_search for better recall
+       params = zvec.HnswQueryParams(ef_search=100)
+       ```
+    
+    2. **Use appropriate metric**:
+       - `IP` (Inner Product) for normalized vectors
+       - `L2` for Euclidean distance
+       - `COSINE` for angular similarity
+    
+    3. **Optimize vector precision**:
+       - Use `VECTOR_FP16` or `VECTOR_INT8` for memory savings
+    
+    4. **Batch operations**:
+       - Insert documents in batches
+       - Use multi-query search when possible
+    
+    See [Performance Tuning guide](/guides/performance-tuning) for details.
+  </Accordion>
+
+  <Accordion title="How much memory does Zvec use?">
+    Memory usage depends on:
+    
+    - **Vector count**: N vectors
+    - **Vector dimension**: D dimensions
+    - **Data type**: 4 bytes (FP32), 2 bytes (FP16), etc.
+    - **Index overhead**: HNSW ~10-20% overhead
+    
+    **Rough estimate**: `Memory ≈ N × D × bytes_per_element × 1.2`
+    
+    Example for 1M vectors, 768 dimensions, FP32:
+    ```
+    1,000,000 × 768 × 4 × 1.2 = 3.7 GB
+    ```
+  </Accordion>
+
+  <Accordion title="Does Zvec support GPU acceleration?">
+    Currently, Zvec **does not** support GPU acceleration. All operations run on CPU with optimized SIMD instructions.
+    
+    CPU-based vector search is highly efficient for most use cases, especially with proper index selection and parameter tuning.
+  </Accordion>
+
+  <Accordion title="What's the maximum collection size?">
+    Zvec can handle billions of vectors, limited primarily by:
+    
+    - **Available memory** (for in-memory indices)
+    - **Disk space** (for memory-mapped storage)
+    - **File system limits**
+    
+    For very large datasets (100M+ vectors), consider:
+    - Using IVF index for memory efficiency
+    - Memory-mapped storage mode
+    - Partitioning across multiple collections
+  </Accordion>
+</AccordionGroup>
+
+## Data Persistence
+
+<AccordionGroup>
+  <Accordion title="Where is data stored?">
+    Data is stored in the directory you specify when creating a collection:
+    
+    ```python
+    collection = zvec.create_and_open(path="./my_data", schema=schema)
+    ```
+    
+    The directory contains:
+    - Index files
+    - Vector data
+    - Metadata
+    - Schema definition
+  </Accordion>
+
+  <Accordion title="Is data automatically persisted?">
+    Yes, Zvec automatically persists data to disk. All insertions and updates are durable once the operation completes.
+    
+    <Note>
+      Call `collection.optimize()` periodically to consolidate segments and improve query performance.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Can I move a collection to a different machine?">
+    Yes! Simply copy the entire collection directory:
+    
+    ```bash
+    # On source machine
+    tar -czf my_collection.tar.gz ./my_data
+    
+    # On target machine
+    tar -xzf my_collection.tar.gz
+    ```
+    
+    Then open it normally:
+    ```python
+    collection = zvec.open("./my_data")
+    ```
+    
+    <Warning>
+      Ensure both machines have the same Zvec version and compatible platforms (same architecture).
+    </Warning>
+  </Accordion>
+
+  <Accordion title="How do I backup my data?">
+    To backup a collection:
+    
+    1. **Close the collection** (or open in read-only mode)
+    2. **Copy the directory**:
+       ```bash
+       cp -r ./my_data ./backup/my_data_$(date +%Y%m%d)
+       ```
+    3. **Verify backup** by opening it
+    
+    For live backups without closing:
+    ```python
+    # Open in read-only mode
+    collection = zvec.open("./my_data", read_only=True)
+    # Now safe to copy files
+    ```
+  </Accordion>
+
+  <Accordion title="What happens if the process crashes?">
+    Zvec is designed for durability:
+    
+    - **Committed data** is safely persisted to disk
+    - **In-flight operations** may be lost (not yet committed)
+    - **Index consistency** is maintained
+    
+    After a crash, simply reopen the collection:
+    ```python
+    collection = zvec.open("./my_data")
+    # Data is intact up to last commit
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Usage and Integration
+
+<AccordionGroup>
+  <Accordion title="Can I use Zvec with LangChain or LlamaIndex?">
+    Yes! Zvec can be integrated with popular LLM frameworks:
+    
+    - Create a custom vector store adapter
+    - Use Zvec for retrieval in RAG pipelines
+    - Combine with embedding functions
+    
+    See the [RAG Pipeline example](/resources/examples#rag-pipeline) for integration patterns.
+  </Accordion>
+
+  <Accordion title="Does Zvec support concurrent access?">
+    **Read operations**: Multiple processes can read simultaneously
+    
+    **Write operations**: Only one process should write at a time
+    
+    For multi-process scenarios:
+    - Use read-only mode for readers: `zvec.open(path, read_only=True)`
+    - Coordinate writes through your application logic
+    
+    <Warning>
+      Concurrent writes from multiple processes are not supported and may corrupt data.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="How do I implement filtering during search?">
+    Use metadata fields and filter expressions:
+    
+    ```python
+    # Define filterable fields
+    schema = zvec.CollectionSchema(
+        name="products",
+        vectors=zvec.VectorSchema("features", zvec.DataType.VECTOR_FP32, 128),
+        fields=[
+            zvec.FieldSchema("category", zvec.DataType.STRING, indexed=True),
+            zvec.FieldSchema("price", zvec.DataType.FLOAT, indexed=True),
+        ]
+    )
+    
+    # Query with filters
+    results = collection.query(
+        zvec.VectorQuery("features", vector=query_vector),
+        filter="category == 'Electronics' AND price < 1000",
+        topk=10
+    )
+    ```
+    
+    See [Filtering guide](/guides/filtering) for filter syntax details.
+  </Accordion>
+
+  <Accordion title="Can I update existing vectors?">
+    Yes, use the `update` method:
+    
+    ```python
+    # Update a document's vector or fields
+    collection.update(
+        id="doc_123",
+        vectors={"embedding": new_vector},
+        fields={"title": "Updated Title"}
+    )
+    ```
+    
+    <Note>
+      Updates trigger re-indexing for the modified document, which may impact performance for frequent updates.
+    </Note>
+  </Accordion>
+
+  <Accordion title="How do I delete documents from a collection?">
+    Delete by ID:
+    
+    ```python
+    # Delete single document
+    collection.delete("doc_123")
+    
+    # Delete multiple documents
+    collection.delete(["doc_1", "doc_2", "doc_3"])
+    
+    # Delete by filter
+    collection.delete(filter="category == 'Archived'")
+    ```
+    
+    Call `optimize()` after bulk deletes to reclaim space.
+  </Accordion>
+</AccordionGroup>
+
+## Community and Support
+
+<AccordionGroup>
+  <Accordion title="Where can I get help?">
+    Multiple support channels:
+    
+    - **[Discord Community](https://discord.gg/rKddFBBu9z)** - Real-time chat and support
+    - **[GitHub Issues](https://github.com/alibaba/zvec/issues)** - Bug reports and feature requests
+    - **[GitHub Discussions](https://github.com/alibaba/zvec/discussions)** - Questions and community help
+    - **[Documentation](https://zvec.org/en/docs/)** - Comprehensive guides
+    - **WeChat/DingTalk** - Scan QR codes in [README](https://github.com/alibaba/zvec)
+  </Accordion>
+
+  <Accordion title="How can I contribute to Zvec?">
+    We welcome contributions! See the [Contributing guide](/resources/contributing) for:
+    
+    - Development setup
+    - Coding standards
+    - Testing guidelines
+    - Pull request process
+    
+    You can contribute:
+    - Code (features, bug fixes)
+    - Documentation improvements
+    - Examples and tutorials
+    - Bug reports and feature requests
+  </Accordion>
+
+  <Accordion title="Where can I find more examples?">
+    Examples are available in multiple places:
+    
+    - **[Examples page](/resources/examples)** - Curated use cases
+    - **[GitHub examples/](https://github.com/alibaba/zvec/tree/main/examples)** - Source code examples
+    - **[Guides section](/guides/dense-vectors)** - Step-by-step tutorials
+    - **Community contributions** - Discord and GitHub discussions
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Can't find your question? Ask in our [Discord community](https://discord.gg/rKddFBBu9z) or [open a discussion](https://github.com/alibaba/zvec/discussions) on GitHub!
+</Note>

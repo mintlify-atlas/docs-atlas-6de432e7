@@ -1,0 +1,148 @@
+---
+title: "Collection"
+description: "Core methods for managing and interacting with Zvec collections"
+---
+
+## Overview
+
+The `Collection` class is the primary interface for interacting with your data in Zvec. It provides methods for:
+
+- **Data Manipulation (DML)**: Insert, update, upsert, and delete documents
+- **Data Querying (DQL)**: Vector similarity search, filtering, and document retrieval
+- **Schema Management (DDL)**: Create indices, add/drop columns, optimize collections
+
+A `Collection` instance is obtained via `zvec.create_and_open()` or `zvec.open()` — you should never instantiate it directly.
+
+## Creating a Collection
+
+```python
+import zvec
+
+# Create and open a new collection
+collection = zvec.create_and_open(
+    path="./my_collection",
+    schema=my_schema
+)
+
+# Or open an existing collection
+collection = zvec.open("./my_collection")
+```
+
+## Available Methods
+
+### Data Manipulation
+
+<CardGroup cols={2}>
+  <Card title="insert()" icon="plus" href="/api/collection/insert">
+    Add new documents to the collection
+  </Card>
+  <Card title="update()" icon="pen" href="/api/collection/update">
+    Modify existing documents by ID
+  </Card>
+  <Card title="upsert()" icon="arrows-rotate" href="/api/collection/update">
+    Insert or update documents
+  </Card>
+  <Card title="delete()" icon="trash" href="/api/collection/delete">
+    Remove documents by ID or filter
+  </Card>
+</CardGroup>
+
+### Data Querying
+
+<CardGroup cols={2}>
+  <Card title="query()" icon="magnifying-glass" href="/api/collection/query">
+    Perform vector similarity search
+  </Card>
+  <Card title="fetch()" icon="download" href="/api/collection/query">
+    Retrieve documents by ID
+  </Card>
+</CardGroup>
+
+### Schema Management
+
+<CardGroup cols={2}>
+  <Card title="create_index()" icon="network-wired" href="/api/collection/schema-management">
+    Build indices on vector or scalar fields
+  </Card>
+  <Card title="add_column()" icon="table-columns" href="/api/collection/schema-management">
+    Add a new field to the schema
+  </Card>
+  <Card title="alter_column()" icon="wrench" href="/api/collection/schema-management">
+    Rename or modify existing columns
+  </Card>
+  <Card title="optimize()" icon="gauge-high" href="/api/collection/schema-management">
+    Merge segments and rebuild indices
+  </Card>
+</CardGroup>
+
+## Properties
+
+<ResponseField name="path" type="str" required>
+  The filesystem path where the collection is stored.
+</ResponseField>
+
+<ResponseField name="schema" type="CollectionSchema" required>
+  The schema defining the structure of the collection.
+</ResponseField>
+
+<ResponseField name="option" type="CollectionOption" required>
+  The options used to open the collection.
+</ResponseField>
+
+<ResponseField name="stats" type="CollectionStats" required>
+  Runtime statistics about the collection (e.g., document count, size).
+</ResponseField>
+
+## Lifecycle Management
+
+### Flushing Data
+
+Force all pending writes to disk to ensure durability:
+
+```python
+collection.flush()
+```
+
+### Destroying a Collection
+
+<Warning>
+  This operation is **irreversible**. All data will be permanently deleted.
+</Warning>
+
+```python
+collection.destroy()
+```
+
+## Example Usage
+
+```python
+import zvec
+from zvec import Doc, VectorQuery
+
+# Open collection
+collection = zvec.open("./documents")
+
+# Insert documents
+docs = [
+    Doc(id="1", vectors={"embedding": [0.1, 0.2, 0.3]}, fields={"title": "Hello"}),
+    Doc(id="2", vectors={"embedding": [0.4, 0.5, 0.6]}, fields={"title": "World"})
+]
+statuses = collection.insert(docs)
+
+# Query similar documents
+results = collection.query(
+    vectors=VectorQuery("embedding", vector=[0.15, 0.25, 0.35]),
+    topk=5,
+    filter="title != 'spam'"
+)
+
+# Flush and cleanup
+collection.flush()
+```
+
+## See Also
+
+- [Insert Operations](/api/collection/insert)
+- [Query Operations](/api/collection/query)
+- [Schema Management](/api/collection/schema-management)
+- [CollectionSchema](/api/schema/collection-schema)

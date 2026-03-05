@@ -1,0 +1,308 @@
+---
+title: MetricType
+description: Enumeration of distance and similarity metrics for vector search
+---
+
+## Overview
+
+`MetricType` defines the distance or similarity function used to compare vectors during search operations. The choice of metric affects search results and performance.
+
+```python
+import zvec
+
+print(zvec.MetricType.COSINE)
+# Output: MetricType.COSINE
+```
+
+## Available Metrics
+
+<ParamField path="L2" type="MetricType">
+  **Euclidean distance (L2 norm)**. Measures straight-line distance between two vectors in Euclidean space.
+  
+  **Formula**: `√(Σ(a[i] - b[i])²)`
+  
+  **Range**: `[0, ∞)` (0 = identical, larger = more different)
+  
+  **When to use**: When magnitude matters, working with embeddings not normalized to unit length.
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=768,
+      metric=MetricType.L2
+  )
+  ```
+</ParamField>
+
+<ParamField path="IP" type="MetricType">
+  **Inner Product (dot product)**. Computes the dot product of two vectors.
+  
+  **Formula**: `Σ(a[i] × b[i])`
+  
+  **Range**: `(-∞, ∞)` (larger = more similar)
+  
+  **When to use**: When vectors are already normalized, or working with models that output IP-optimized embeddings. Faster than cosine for unit-normalized vectors.
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=1536,
+      metric=MetricType.IP
+  )
+  ```
+</ParamField>
+
+<ParamField path="COSINE" type="MetricType">
+  **Cosine similarity/distance**. Measures the cosine of the angle between two vectors, normalized by their magnitudes.
+  
+  **Formula**: `1 - (a · b) / (||a|| × ||b||)` (as distance)
+  
+  **Range**: `[0, 2]` as distance (0 = identical direction, 2 = opposite)
+  
+  **When to use**: When direction matters more than magnitude, comparing text embeddings, semantic similarity.
+  
+  ```python
+  field = Field(
+      name="text_embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=384,
+      metric=MetricType.COSINE
+  )
+  ```
+</ParamField>
+
+## Metric Properties
+
+All `MetricType` enum members have these properties:
+
+<ResponseField name="name" type="str">
+  The name of the metric as a string.
+  ```python
+  MetricType.COSINE.name  # "COSINE"
+  ```
+</ResponseField>
+
+<ResponseField name="value" type="int">
+  The internal integer value of the metric.
+  ```python
+  MetricType.COSINE.value  # 3
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Defining Vector Field with Metric
+
+```python
+from zvec import Collection, Field, DataType, MetricType
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="title", dtype=DataType.STRING),
+    Field(
+        name="text_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        metric=MetricType.COSINE  # Use cosine similarity
+    ),
+    Field(
+        name="image_embedding",
+        dtype=DataType.VECTOR_FP16,
+        dim=512,
+        metric=MetricType.L2  # Use L2 distance
+    )
+]
+
+collection = Collection.create(name="multimodal", schema=schema)
+```
+
+### Querying with Different Metrics
+
+```python
+from zvec import Collection, MetricType
+
+collection = Collection("articles")
+
+# The metric is defined in the schema, so the same query uses the
+# appropriate distance function for each vector field
+
+# Query vector field using COSINE metric
+results = collection.query(
+    vectors={"text_embedding": query_embedding},
+    topn=10
+)
+
+for doc in results:
+    print(f"ID: {doc.id}, Distance: {doc.score:.4f}")
+```
+
+### Comparing Metrics
+
+```python
+import numpy as np
+from zvec import MetricType
+
+# Two example vectors
+vec_a = np.array([1.0, 2.0, 3.0])
+vec_b = np.array([2.0, 3.0, 4.0])
+
+# L2 distance
+l2_dist = np.linalg.norm(vec_a - vec_b)
+print(f"L2 distance: {l2_dist:.4f}")  # 1.7321
+
+# Inner product
+ip_score = np.dot(vec_a, vec_b)
+print(f"Inner product: {ip_score:.4f}")  # 20.0000
+
+# Cosine similarity
+cos_sim = np.dot(vec_a, vec_b) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b))
+cos_dist = 1 - cos_sim
+print(f"Cosine distance: {cos_dist:.4f}")  # 0.0079
+```
+
+## Choosing the Right Metric
+
+### Decision Guide
+
+<AccordionGroup>
+  <Accordion title="When to use COSINE">
+    **Best for**:
+    - Text embeddings from language models (BERT, GPT, etc.)
+    - Semantic similarity tasks
+    - When vector magnitude is not meaningful
+    - Comparing documents of different lengths
+    
+    **Characteristics**:
+    - Normalized comparison (only direction matters)
+    - Range-independent
+    - Most common for text embeddings
+    
+    **Example use cases**:
+    - Document similarity
+    - Semantic search
+    - Recommendation systems
+    - Question answering
+  </Accordion>
+  
+  <Accordion title="When to use IP (Inner Product)">
+    **Best for**:
+    - Pre-normalized embeddings (unit vectors)
+    - Maximum Inner Product Search (MIPS)
+    - Models specifically trained for IP
+    - Performance-critical applications with normalized vectors
+    
+    **Characteristics**:
+    - Fastest for unit-normalized vectors
+    - Equivalent to cosine for normalized vectors
+    - No magnitude normalization
+    
+    **Example use cases**:
+    - Retrieval with normalized embeddings
+    - Recommendation systems with pre-normalized features
+    - Real-time search with unit vectors
+    
+    <Warning>
+      IP is not symmetric for non-normalized vectors. For unit-normalized vectors, IP is equivalent to cosine similarity.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="When to use L2">
+    **Best for**:
+    - Embeddings where magnitude is meaningful
+    - Image embeddings
+    - Spatial data
+    - When distance in Euclidean space matters
+    
+    **Characteristics**:
+    - Considers both direction and magnitude
+    - Natural geometric interpretation
+    - Can be slower than IP for high dimensions
+    
+    **Example use cases**:
+    - Image similarity
+    - Spatial search
+    - Anomaly detection
+    - Clustering
+  </Accordion>
+</AccordionGroup>
+
+### Performance Comparison
+
+<Tip>
+  **Speed**: IP ≈ COSINE > L2
+  
+  For normalized vectors, IP and COSINE have similar performance. L2 can be slower due to the square root operation, though many implementations optimize this.
+</Tip>
+
+### Metric Equivalence for Normalized Vectors
+
+For unit-normalized vectors (||v|| = 1):
+
+```python
+# These are equivalent for normalized vectors:
+ip_score = np.dot(vec_a, vec_b)  # Inner product
+cos_sim = np.dot(vec_a, vec_b)   # Cosine similarity
+
+# L2 distance relates to cosine:
+l2_squared = 2 * (1 - cos_sim)
+```
+
+## Working with Metrics in Reranking
+
+`MetricType` is used in weighted reranking for score normalization:
+
+```python
+from zvec import MetricType
+from zvec.extension import WeightedReRanker
+
+# Normalize scores based on the metric used
+reranker = WeightedReRanker(
+    topn=10,
+    metric=MetricType.COSINE,  # Normalize assuming cosine distance
+    weights={"title_vec": 2.0, "content_vec": 1.0}
+)
+
+results = collection.query(
+    vectors={
+        "title_vec": title_embedding,
+        "content_vec": content_embedding
+    },
+    reranker=reranker
+)
+```
+
+See [WeightedReRanker](/api/reranking/weighted) for details on score normalization.
+
+## Common Pitfalls
+
+<Warning>
+  **IP vs COSINE**: Using IP with non-normalized vectors can produce unexpected results. Always normalize vectors first, or use COSINE instead.
+  
+  ```python
+  # ❌ Wrong: Using IP with non-normalized vectors
+  field = Field(
+      name="embedding",
+      metric=MetricType.IP
+  )
+  collection.insert({"embedding": [1.0, 2.0, 3.0]})  # Not normalized!
+  
+  # ✅ Correct: Normalize first, or use COSINE
+  import numpy as np
+  vec = np.array([1.0, 2.0, 3.0])
+  normalized_vec = vec / np.linalg.norm(vec)
+  collection.insert({"embedding": normalized_vec.tolist()})
+  ```
+</Warning>
+
+<Warning>
+  **Metric Mismatch**: Ensure the metric matches your embedding model's training objective. Some models are optimized for specific metrics.
+</Warning>
+
+## See Also
+
+- [Field Definition](/api/schema/field-schema)
+- [DataType](/api/types/data-type) - Vector data types
+- [WeightedReRanker](/api/reranking/weighted) - Score normalization with metrics
+- [IndexType](/api/types/index-type) - Index types for vector search

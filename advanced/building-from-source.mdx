@@ -1,0 +1,503 @@
+---
+title: Building from Source
+description: Build Zvec from source code with custom configurations
+---
+
+This guide covers building Zvec from source for development, custom builds, or unsupported platforms.
+
+## Prerequisites
+
+### Required Tools
+
+| Tool | Minimum Version | Purpose |
+|------|----------------|----------|
+| **CMake** | 3.13+ (< 4.0) | Build system |
+| **Python** | 3.10 - 3.12 | Python bindings |
+| **C++ Compiler** | C++17 support | Core library |
+| **Git** | Any recent | Source management |
+
+### C++ Compilers
+
+#### Linux
+
+- **GCC**: 11+ recommended
+- **Clang**: 12+ recommended
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install build-essential cmake git
+
+# Fedora/RHEL
+sudo dnf install gcc-c++ cmake git
+```
+
+#### macOS
+
+- **Apple Clang**: Included with Xcode Command Line Tools
+
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Install CMake via Homebrew
+brew install cmake
+```
+
+#### Windows
+
+- **MSVC**: Visual Studio 2019 or later
+- **CMake**: Install from [cmake.org](https://cmake.org/download/)
+
+<Note>
+Windows support is experimental. Linux and macOS are the primary supported platforms.
+</Note>
+
+### Python Dependencies
+
+```bash
+pip install --upgrade pip setuptools wheel
+pip install scikit-build-core[pyproject] pybind11
+```
+
+---
+
+## Building for Development
+
+### 1. Clone the Repository
+
+```bash
+git clone --recursive https://github.com/alibaba/zvec.git
+cd zvec
+```
+
+<Tip>
+**Forgot `--recursive`?** Initialize submodules manually:
+
+```bash
+git submodule update --init --recursive
+```
+</Tip>
+
+### 2. Install Pre-commit Hooks (Optional)
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This ensures code quality checks run automatically before commits.
+
+### 3. Build and Install (Editable Mode)
+
+```bash
+# Install in development mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+**What happens:**
+- CMake configures the build
+- C++ extension is compiled
+- Python package is linked in editable mode
+- Development dependencies (pytest, ruff, etc.) are installed
+
+### 4. Verify Installation
+
+```bash
+python -c "import zvec; print('Zvec version:', zvec.__version__)"
+```
+
+---
+
+## Build Configuration
+
+### CMake Build Types
+
+Control the build type via `CMAKE_BUILD_TYPE` environment variable:
+
+```bash
+# Release build (default, optimized)
+CMAKE_BUILD_TYPE=Release pip install -e .
+
+# Debug build (with debug symbols)
+CMAKE_BUILD_TYPE=Debug pip install -e .
+
+# Coverage build (for code coverage analysis)
+CMAKE_BUILD_TYPE=Coverage pip install -e .
+```
+
+### Build Generators
+
+Zvec uses **Ninja** by default. To use **Unix Makefiles**:
+
+```bash
+CMAKE_GENERATOR="Unix Makefiles" pip install -e .
+```
+
+### AVX-512 Optimizations
+
+Enable AVX-512 instructions for x86_64 CPUs (Skylake and newer):
+
+```bash
+ENABLE_SKYLAKE_AVX512=ON pip install -e .
+```
+
+<Warning>
+**Compatibility Warning**: AVX-512 binaries won't run on older CPUs. Only enable if you control the deployment environment.
+</Warning>
+
+### Python Bindings Control
+
+Build with or without Python bindings:
+
+```bash
+# Build Python bindings (default)
+BUILD_PYTHON_BINDINGS=ON pip install -e .
+
+# C++ library only (no Python)
+cmake -S . -B build -DBUILD_PYTHON_BINDINGS=OFF
+cmake --build build
+```
+
+### Tools and Utilities
+
+Build command-line tools:
+
+```bash
+# Build with tools (default: ON)
+cmake -S . -B build -DBUILD_TOOLS=ON
+cmake --build build
+
+# Skip tools for faster builds
+cmake -S . -B build -DBUILD_TOOLS=OFF
+cmake --build build
+```
+
+### Using OSS Mirror
+
+For faster third-party dependency downloads in China:
+
+```bash
+# Enable OSS mirror (default: ON)
+cmake -S . -B build -DUSE_OSS_MIRROR=ON
+```
+
+---
+
+## Platform-Specific Notes
+
+### Linux (x86_64)
+
+**Recommended Configuration:**
+
+```bash
+CMAKE_BUILD_TYPE=Release \
+ENABLE_SKYLAKE_AVX512=ON \
+pip install -e .
+```
+
+**System Dependencies:**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libtbb-dev libboost-all-dev
+
+# Fedora/RHEL
+sudo dnf install tbb-devel boost-devel
+```
+
+### Linux (ARM64)
+
+**Recommended Configuration:**
+
+```bash
+CMAKE_BUILD_TYPE=Release pip install -e .
+```
+
+**Notes:**
+- AVX-512 is not available on ARM
+- NEON SIMD optimizations are enabled automatically
+
+### macOS (ARM64 - Apple Silicon)
+
+**Recommended Configuration:**
+
+```bash
+CMAKE_BUILD_TYPE=Release pip install -e .
+```
+
+**Important:**
+- Code signing is preserved (stripping disabled)
+- ARM NEON optimizations are enabled automatically
+
+**Troubleshooting:**
+
+If you encounter "command not found: cmake":
+
+```bash
+brew install cmake
+```
+
+If you see "xcrun: error: invalid active developer path":
+
+```bash
+xcode-select --install
+```
+
+### macOS (x86_64 - Intel)
+
+**Recommended Configuration:**
+
+```bash
+CMAKE_BUILD_TYPE=Release pip install -e .
+```
+
+---
+
+## Advanced Build Options
+
+### Manual CMake Build
+
+For full control, build with CMake directly:
+
+```bash
+# Configure
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_PYTHON_BINDINGS=ON \
+  -DBUILD_TOOLS=ON \
+  -DENABLE_SKYLAKE_AVX512=OFF
+
+# Build
+cmake --build build -j$(nproc)
+
+# Install (optional)
+cmake --install build --prefix /usr/local
+```
+
+### Verbose Build Output
+
+```bash
+# Verbose CMake configuration
+pip install -v -e .
+
+# Or with CMake directly
+cmake --build build --verbose
+```
+
+### Clean Build
+
+```bash
+# Remove build directory
+rm -rf build _skbuild
+
+# Rebuild from scratch
+pip install -e . --force-reinstall --no-cache-dir
+```
+
+### Install Location
+
+Control where Python bindings are installed:
+
+```bash
+cmake -S . -B build \
+  -DSKBUILD_PLATLIB_DIR=/path/to/install \
+  -DBUILD_PYTHON_BINDINGS=ON
+
+cmake --build build
+cmake --install build
+```
+
+---
+
+## Testing
+
+### Run Python Tests
+
+```bash
+# Install test dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest python/tests/ -v
+
+# Run specific test file
+pytest python/tests/test_collection.py -v
+
+# Run with coverage
+pytest python/tests/ --cov=zvec --cov-report=html
+```
+
+### Run C++ Tests
+
+```bash
+# Build with tests
+cmake -S . -B build -DBUILD_TESTS=ON
+cmake --build build
+
+# Run tests
+cd build
+ctest --output-on-failure
+```
+
+---
+
+## Troubleshooting
+
+### CMake Version Mismatch
+
+**Error:**
+```
+CMake 3.13 or higher is required. You are running version X.X.X
+```
+
+**Solution:**
+```bash
+# Ubuntu/Debian: Install from Kitware APT repository
+wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
+sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
+sudo apt-get update
+sudo apt-get install cmake
+
+# macOS
+brew upgrade cmake
+
+# Or install via pip
+pip install cmake
+```
+
+### Compiler Not Found
+
+**Error:**
+```
+No CMAKE_CXX_COMPILER could be found
+```
+
+**Solution:**
+```bash
+# Linux
+sudo apt-get install build-essential
+
+# macOS
+xcode-select --install
+```
+
+### Missing Submodules
+
+**Error:**
+```
+CMake Error: The source directory "..." does not contain a CMakeLists.txt file.
+```
+
+**Solution:**
+```bash
+git submodule update --init --recursive
+```
+
+### Python Version Issues
+
+**Error:**
+```
+Requires Python 3.10-3.12, but found 3.9
+```
+
+**Solution:**
+```bash
+# Install compatible Python version
+pyenv install 3.12
+pyenv local 3.12
+
+# Or use conda
+conda create -n zvec python=3.12
+conda activate zvec
+```
+
+### Linker Errors on Linux
+
+**Error:**
+```
+undefined reference to `...'@GLIBCXX_...
+```
+
+**Solution:**
+Ensure you're using GCC 11+:
+
+```bash
+sudo apt-get install gcc-11 g++-11
+export CC=gcc-11
+export CXX=g++-11
+pip install -e . --force-reinstall
+```
+
+---
+
+## Contributing
+
+If you're building from source to contribute, please review the [Contributing Guide](https://github.com/alibaba/zvec/blob/main/CONTRIBUTING.md) for:
+
+- Code style guidelines
+- Commit message conventions
+- Pull request process
+- Testing requirements
+
+**Key points:**
+
+1. **Fork and branch**: Create feature branches (`feat/...`, `fix/...`, `docs/...`)
+2. **Write tests**: Include test coverage for new features
+3. **Run linters**: `ruff check python/` before committing
+4. **Update docs**: Document new APIs and features
+5. **Clear commit messages**: `fix(query): handle null vector in dense_fp32`
+
+---
+
+## Build Performance Tips
+
+### 1. Use Ninja
+
+Ninja is faster than Make for incremental builds:
+
+```bash
+pip install ninja
+CMAKE_GENERATOR=Ninja pip install -e .
+```
+
+### 2. Parallel Builds
+
+```bash
+# Use all CPU cores
+cmake --build build -j$(nproc)
+
+# Or limit to 4 cores
+cmake --build build -j4
+```
+
+### 3. ccache
+
+Speed up recompilation:
+
+```bash
+# Install ccache
+sudo apt-get install ccache  # Linux
+brew install ccache          # macOS
+
+# Configure CMake to use ccache
+export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+pip install -e .
+```
+
+### 4. Skip Tools
+
+For faster iteration:
+
+```bash
+cmake -S . -B build -DBUILD_TOOLS=OFF
+```
+
+---
+
+## See Also
+
+- [Contributing Guide](https://github.com/alibaba/zvec/blob/main/CONTRIBUTING.md) - Contribution guidelines
+- [GitHub Repository](https://github.com/alibaba/zvec) - Source code
+- [Installation Guide](/installation) - Pre-built packages
+- [Development Setup](/advanced/building-from-source) - IDE configuration and workflows

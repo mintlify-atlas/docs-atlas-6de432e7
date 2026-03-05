@@ -1,0 +1,282 @@
+---
+title: "OpenAIDenseEmbedding"
+description: "Dense text embedding using OpenAI API"
+---
+
+## Overview
+
+`OpenAIDenseEmbedding` provides text-to-vector embedding capabilities using OpenAI's embedding models. It supports various models with configurable dimensions and includes automatic result caching for improved performance.
+
+**Location**: `python/zvec/extension/openai_embedding_function.py:24`
+
+## Installation
+
+```bash
+pip install openai
+```
+
+## Class Definition
+
+```python
+from zvec.extension import OpenAIDenseEmbedding
+
+class OpenAIDenseEmbedding(DenseEmbeddingFunction[TEXT]):
+    """Dense text embedding function using OpenAI API."""
+```
+
+## Constructor
+
+```python
+OpenAIDenseEmbedding(
+    model: str = "text-embedding-3-small",
+    dimension: Optional[int] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="model" type="str" default="text-embedding-3-small">
+  OpenAI embedding model identifier. Common options:
+  - `text-embedding-3-small`: 1536 dims, cost-efficient, good performance
+  - `text-embedding-3-large`: 3072 dims, highest quality
+  - `text-embedding-ada-002`: 1536 dims, legacy model
+</ParamField>
+
+<ParamField path="dimension" type="Optional[int]" default="None">
+  Desired output embedding dimension. If `None`, uses model's default dimension. For text-embedding-3 models, you can specify custom dimensions (e.g., 256, 512, 1024, 1536).
+</ParamField>
+
+<ParamField path="api_key" type="Optional[str]" default="None">
+  OpenAI API authentication key. If `None`, reads from `OPENAI_API_KEY` environment variable. Obtain your key from: https://platform.openai.com/api-keys
+</ParamField>
+
+<ParamField path="base_url" type="Optional[str]" default="None">
+  Custom API base URL for OpenAI-compatible services (e.g., Azure OpenAI). Defaults to official OpenAI endpoint.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional parameters for API calls:
+  - `encoding_format` (str): Format of embeddings, "float" or "base64"
+  - `user` (str): User identifier for tracking
+</ParamField>
+
+## Properties
+
+### dimension
+
+```python
+@property
+def dimension(self) -> int:
+    """The embedding vector dimension."""
+```
+
+### extra_params
+
+```python
+@property
+def extra_params(self) -> dict:
+    """Extra parameters for model-specific customization."""
+```
+
+## Methods
+
+### embed()
+
+```python
+@lru_cache(maxsize=10)
+def embed(self, input: TEXT) -> DenseVectorType:
+    """Generate dense embedding vector for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed. Must be non-empty. Maximum length is 8191 tokens for most models.
+
+**Returns:**
+- `DenseVectorType`: A list of floats representing the embedding vector. Length equals `self.dimension`.
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty/whitespace-only or API returns error
+- `RuntimeError`: If network connectivity issues or OpenAI service errors occur
+
+<Note>
+The `embed()` method is cached with LRU cache (maxsize=10). Identical inputs return cached results.
+</Note>
+
+## Usage Examples
+
+### Basic Usage
+
+```python
+from zvec.extension import OpenAIDenseEmbedding
+import os
+
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+emb_func = OpenAIDenseEmbedding()
+vector = emb_func.embed("Hello, world!")
+print(len(vector))  # 1536
+```
+
+### Custom Model and Dimension
+
+```python
+emb_func = OpenAIDenseEmbedding(
+    model="text-embedding-3-large",
+    dimension=1024,
+    api_key="sk-..."
+)
+
+vector = emb_func.embed("Machine learning is fascinating")
+print(len(vector))  # 1024
+```
+
+### Azure OpenAI
+
+```python
+emb_func = OpenAIDenseEmbedding(
+    model="text-embedding-ada-002",
+    api_key="your-azure-key",
+    base_url="https://your-resource.openai.azure.com/"
+)
+
+vector = emb_func.embed("Natural language processing")
+print(isinstance(vector, list))  # True
+```
+
+### Batch Processing with Caching
+
+```python
+texts = ["First text", "Second text", "First text"]
+vectors = [emb_func.embed(text) for text in texts]
+# Third call uses cached result for "First text"
+```
+
+### Callable Interface
+
+```python
+emb_func = OpenAIDenseEmbedding()
+
+# Both work the same
+vector1 = emb_func.embed("Hello world")
+vector2 = emb_func("Hello world")
+```
+
+### Semantic Similarity
+
+```python
+import numpy as np
+
+emb_func = OpenAIDenseEmbedding()
+
+v1 = emb_func.embed("The cat sits on the mat")
+v2 = emb_func.embed("A feline rests on a rug")
+v3 = emb_func.embed("Python programming")
+
+# Normalize vectors
+v1_norm = v1 / np.linalg.norm(v1)
+v2_norm = v2 / np.linalg.norm(v2)
+v3_norm = v3 / np.linalg.norm(v3)
+
+# Calculate cosine similarity
+similarity_high = np.dot(v1_norm, v2_norm)  # Similar sentences
+similarity_low = np.dot(v1_norm, v3_norm)   # Different topics
+
+print(similarity_high > similarity_low)  # True
+```
+
+## Error Handling
+
+```python
+try:
+    vector = emb_func.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Error: Input text cannot be empty or whitespace only
+
+try:
+    vector = emb_func.embed(123)  # Wrong type
+except TypeError as e:
+    print(f"Error: {e}")
+    # Error: Expected 'input' to be str, got int
+```
+
+## Model Comparison
+
+<CardGroup cols={3}>
+  <Card title="text-embedding-3-small" icon="s">
+    **Dimensions**: 1536  
+    **Cost**: Low  
+    **Performance**: Good
+  </Card>
+  <Card title="text-embedding-3-large" icon="l">
+    **Dimensions**: 3072  
+    **Cost**: Medium  
+    **Performance**: Highest
+  </Card>
+  <Card title="text-embedding-ada-002" icon="a">
+    **Dimensions**: 1536  
+    **Cost**: Low  
+    **Performance**: Legacy
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Tip>
+**Environment Variables**: Store API keys in environment variables instead of hardcoding:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Then simply:
+```python
+emb_func = OpenAIDenseEmbedding()  # Auto-reads from env
+```
+</Tip>
+
+<Warning>
+**Rate Limits**: OpenAI API has rate limits based on your account tier. Handle rate limit errors appropriately:
+
+```python
+import time
+from openai import RateLimitError
+
+def embed_with_retry(text, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return emb_func.embed(text)
+        except RateLimitError:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                raise
+```
+</Warning>
+
+<Info>
+**Caching**: Results are cached automatically. For better cache hits, consider:
+- Normalizing text (lowercasing, whitespace trimming)
+- Pre-processing inputs consistently
+- Using the same embedding instance for similar queries
+</Info>
+
+## Notes
+
+- Requires Python 3.10, 3.11, or 3.12
+- Requires the `openai` package: `pip install openai`
+- Network connectivity to OpenAI API endpoints is required
+- API usage incurs costs based on your OpenAI subscription plan
+- Rate limits apply based on your OpenAI account tier
+- Embedding results are cached (LRU cache, maxsize=10)
+
+## See Also
+
+- [DenseEmbeddingFunction](/api/embeddings/dense) - Base class documentation
+- [QwenDenseEmbedding](/api/embeddings/qwen) - Alternative using Qwen API
+- [DefaultLocalDenseEmbedding](/api/embeddings/sentence-transformers) - Local model without API calls
+- [Embedding Functions Overview](/api/embeddings/overview)

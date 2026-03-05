@@ -1,0 +1,419 @@
+---
+title: Schemas
+description: Define the structure of your collections with CollectionSchema, FieldSchema, and VectorSchema
+---
+
+A **schema** defines the structure of a collection in Zvec. Every collection has a fixed schema that specifies:
+
+- The collection name
+- Scalar fields (e.g., ID, title, timestamp)
+- Vector fields for similarity search
+- Data types, dimensions, and constraints
+
+## Schema Components
+
+Zvec schemas consist of three main classes:
+
+- **`CollectionSchema`**: Top-level container for the entire schema
+- **`FieldSchema`**: Defines scalar (non-vector) fields
+- **`VectorSchema`**: Defines vector fields for embeddings
+
+## CollectionSchema
+
+The `CollectionSchema` class defines the overall structure of a collection:
+
+```python
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+
+schema = CollectionSchema(
+    name="my_collection",
+    fields=[field1, field2, ...],    # Scalar fields
+    vectors=[vector1, vector2, ...]   # Vector fields
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Name of the collection (required) |
+| `fields` | `FieldSchema` or `list[FieldSchema]` | One or more scalar field definitions |
+| `vectors` | `VectorSchema` or `list[VectorSchema]` | One or more vector field definitions |
+
+<Note>
+  Field names must be unique across both scalar and vector fields. Duplicate names will raise a `ValueError`.
+</Note>
+
+### Accessing Schema Information
+
+```python
+# Get collection name
+print(schema.name)  # "my_collection"
+
+# List all scalar fields
+for field in schema.fields:
+    print(f"{field.name}: {field.data_type}")
+
+# List all vector fields
+for vector in schema.vectors:
+    print(f"{vector.name}: {vector.dimension}D {vector.data_type}")
+
+# Retrieve specific field by name
+id_field = schema.field("id")
+if id_field:
+    print(f"ID field type: {id_field.data_type}")
+
+# Retrieve specific vector by name
+emb_field = schema.vector("embedding")
+if emb_field:
+    print(f"Embedding dimension: {emb_field.dimension}")
+```
+
+## FieldSchema
+
+The `FieldSchema` class defines scalar (non-vector) fields:
+
+```python
+from zvec import FieldSchema, DataType, InvertIndexParam
+
+# Simple field
+id_field = FieldSchema(
+    name="id",
+    data_type=DataType.INT64,
+    nullable=False
+)
+
+# Field with inverted index
+category_field = FieldSchema(
+    name="category",
+    data_type=DataType.STRING,
+    nullable=True,
+    index_param=InvertIndexParam(enable_range_optimization=True)
+)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | - | Field name (must be unique) |
+| `data_type` | `DataType` | - | Data type (see below) |
+| `nullable` | `bool` | `False` | Whether field can contain null values |
+| `index_param` | `InvertIndexParam` | `None` | Inverted index configuration for filtering |
+
+### Supported Scalar Data Types
+
+Zvec supports the following scalar data types:
+
+#### Numeric Types
+
+```python
+DataType.INT32      # 32-bit signed integer
+DataType.INT64      # 64-bit signed integer
+DataType.UINT32     # 32-bit unsigned integer
+DataType.UINT64     # 64-bit unsigned integer
+DataType.FLOAT      # 32-bit floating point
+DataType.DOUBLE     # 64-bit floating point
+```
+
+#### String and Boolean
+
+```python
+DataType.STRING     # UTF-8 string
+DataType.BOOL       # Boolean (true/false)
+```
+
+#### Array Types
+
+```python
+DataType.ARRAY_INT32      # Array of 32-bit integers
+DataType.ARRAY_INT64      # Array of 64-bit integers
+DataType.ARRAY_UINT32     # Array of unsigned 32-bit integers
+DataType.ARRAY_UINT64     # Array of unsigned 64-bit integers
+DataType.ARRAY_FLOAT      # Array of floats
+DataType.ARRAY_DOUBLE     # Array of doubles
+DataType.ARRAY_STRING     # Array of strings
+DataType.ARRAY_BOOL       # Array of booleans
+```
+
+### Example: Multiple Scalar Fields
+
+```python
+from zvec import FieldSchema, DataType
+
+fields = [
+    FieldSchema("id", DataType.INT64, nullable=False),
+    FieldSchema("title", DataType.STRING, nullable=False),
+    FieldSchema("timestamp", DataType.INT64, nullable=False),
+    FieldSchema("price", DataType.FLOAT, nullable=True),
+    FieldSchema("tags", DataType.ARRAY_STRING, nullable=True),
+    FieldSchema("views", DataType.INT32, nullable=False)
+]
+```
+
+## VectorSchema
+
+The `VectorSchema` class defines vector fields for similarity search:
+
+```python
+from zvec import VectorSchema, DataType, HnswIndexParam
+
+# Dense vector with HNSW index
+embedding = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768,
+    index_param=HnswIndexParam(m=16, ef_construction=200)
+)
+
+# Sparse vector with default index
+sparse_embedding = VectorSchema(
+    name="sparse_embedding",
+    data_type=DataType.SPARSE_VECTOR_FP32,
+    dimension=0,  # Dimension not required for sparse vectors
+    index_param=FlatIndexParam()
+)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | - | Vector field name (must be unique) |
+| `data_type` | `DataType` | - | Vector data type (see below) |
+| `dimension` | `int` | `0` | Vector dimensionality (must be > 0 for dense vectors) |
+| `index_param` | `HnswIndexParam`, `IVFIndexParam`, `FlatIndexParam` | `FlatIndexParam()` | Index configuration |
+
+### Supported Vector Data Types
+
+#### Dense Vectors
+
+```python
+DataType.VECTOR_FP16    # 16-bit float (half precision)
+DataType.VECTOR_FP32    # 32-bit float (single precision)
+DataType.VECTOR_FP64    # 64-bit float (double precision)
+DataType.VECTOR_INT8    # 8-bit integer (quantized)
+```
+
+#### Sparse Vectors
+
+```python
+DataType.SPARSE_VECTOR_FP16    # Sparse 16-bit float
+DataType.SPARSE_VECTOR_FP32    # Sparse 32-bit float
+```
+
+<Info>
+  **Dense vectors** are stored as fixed-length arrays. **Sparse vectors** are stored as dictionaries mapping indices to values (see [Vectors](/concepts/vectors)).
+</Info>
+
+### Example: Multiple Vector Fields
+
+```python
+from zvec import VectorSchema, DataType, HnswIndexParam, FlatIndexParam
+
+vectors = [
+    # Text embedding
+    VectorSchema(
+        name="text_embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=768,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    ),
+    # Image embedding
+    VectorSchema(
+        name="image_embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=512,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    ),
+    # Sparse keyword embedding
+    VectorSchema(
+        name="keyword_embedding",
+        data_type=DataType.SPARSE_VECTOR_FP32,
+        dimension=0,
+        index_param=FlatIndexParam()
+    )
+]
+```
+
+## Complete Schema Example
+
+Here's a complete example combining all schema components:
+
+```python
+import zvec
+from zvec import (
+    CollectionSchema,
+    FieldSchema,
+    VectorSchema,
+    DataType,
+    HnswIndexParam,
+    InvertIndexParam
+)
+
+# Initialize Zvec
+zvec.init()
+
+# Define scalar fields
+fields = [
+    FieldSchema(
+        name="id",
+        data_type=DataType.INT64,
+        nullable=False
+    ),
+    FieldSchema(
+        name="title",
+        data_type=DataType.STRING,
+        nullable=False
+    ),
+    FieldSchema(
+        name="category",
+        data_type=DataType.STRING,
+        nullable=True,
+        index_param=InvertIndexParam(enable_range_optimization=True)
+    ),
+    FieldSchema(
+        name="price",
+        data_type=DataType.FLOAT,
+        nullable=True
+    ),
+    FieldSchema(
+        name="tags",
+        data_type=DataType.ARRAY_STRING,
+        nullable=True
+    )
+]
+
+# Define vector fields
+vectors = [
+    VectorSchema(
+        name="text_embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=768,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    ),
+    VectorSchema(
+        name="sparse_embedding",
+        data_type=DataType.SPARSE_VECTOR_FP32,
+        dimension=0
+    )
+]
+
+# Create collection schema
+schema = CollectionSchema(
+    name="product_catalog",
+    fields=fields,
+    vectors=vectors
+)
+
+# Create collection
+collection = zvec.create_and_open(
+    path="./data/product_catalog",
+    schema=schema
+)
+
+print(f"Created collection: {collection.schema.name}")
+print(f"Scalar fields: {[f.name for f in collection.schema.fields]}")
+print(f"Vector fields: {[v.name for v in collection.schema.vectors]}")
+```
+
+## Schema Validation
+
+Zvec performs automatic validation when creating schemas:
+
+<AccordionGroup>
+  <Accordion title="Duplicate field names">
+    Field names must be unique across both scalar and vector fields:
+    ```python
+    # This will raise ValueError
+    schema = CollectionSchema(
+        name="test",
+        fields=FieldSchema("embedding", DataType.STRING),
+        vectors=VectorSchema("embedding", DataType.VECTOR_FP32, dimension=128)
+    )
+    # Error: duplicate field name 'embedding'
+    ```
+  </Accordion>
+
+  <Accordion title="Invalid data types">
+    Only supported data types are allowed:
+    ```python
+    # FieldSchema only accepts scalar types
+    field = FieldSchema("vec", DataType.VECTOR_FP32)  # ValueError
+    
+    # VectorSchema only accepts vector types
+    vector = VectorSchema("id", DataType.INT64, dimension=128)  # ValueError
+    ```
+  </Accordion>
+
+  <Accordion title="Invalid dimensions">
+    Dense vectors require positive dimensions:
+    ```python
+    # This will raise ValueError
+    vector = VectorSchema("emb", DataType.VECTOR_FP32, dimension=0)
+    # Error: dimension must be > 0 for dense vectors
+    
+    # Sparse vectors can have dimension=0
+    sparse = VectorSchema("sparse", DataType.SPARSE_VECTOR_FP32, dimension=0)  # OK
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Schema Best Practices
+
+<Steps>
+  <Step title="Plan your schema in advance">
+    Collection schemas are fixed at creation time. Choose appropriate data types and dimensions before creating the collection.
+  </Step>
+
+  <Step title="Use nullable fields for optional data">
+    If a field may not always have a value, set `nullable=True` to avoid insertion errors.
+  </Step>
+
+  <Step title="Choose appropriate vector data types">
+    - `VECTOR_FP32`: Most common, good balance of precision and performance
+    - `VECTOR_FP16`: Reduced memory usage, slightly lower precision
+    - `VECTOR_INT8`: Quantized vectors for extreme memory efficiency
+    - `SPARSE_VECTOR_FP32`: For high-dimensional sparse data (e.g., BM25)
+  </Step>
+
+  <Step title="Add inverted indexes to filtered fields">
+    If you plan to filter by a field frequently, add an inverted index:
+    ```python
+    FieldSchema(
+        name="category",
+        data_type=DataType.STRING,
+        index_param=InvertIndexParam()
+    )
+    ```
+  </Step>
+
+  <Step title="Configure vector indexes at schema creation">
+    Set index parameters during schema definition to avoid rebuilding indexes later:
+    ```python
+    VectorSchema(
+        name="embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=768,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    )
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vectors" icon="vector-square" href="/concepts/vectors">
+    Learn about dense and sparse vector types
+  </Card>
+  <Card title="Indexing" icon="magnifying-glass" href="/concepts/indexing">
+    Understand index types and performance tuning
+  </Card>
+  <Card title="Collections" icon="database" href="/concepts/collections">
+    Work with collections and data operations
+  </Card>
+  <Card title="Querying" icon="search" href="/concepts/querying">
+    Execute vector similarity searches
+  </Card>
+</CardGroup>

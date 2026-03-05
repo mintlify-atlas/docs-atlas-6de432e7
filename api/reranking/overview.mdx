@@ -1,0 +1,120 @@
+---
+title: Reranking Overview
+description: Understanding reranking in Zvec for improving search relevance
+---
+
+## What is Reranking?
+
+Reranking is a technique that refines the output of one or more vector queries by applying a secondary scoring strategy. Instead of relying solely on vector similarity scores, rerankers can:
+
+- Combine results from multiple vector fields
+- Apply semantic understanding using cross-encoder models
+- Merge rankings using fusion algorithms
+
+Rerankers are used in the `query()` method of `Collection` via the `reranker` parameter.
+
+## When to Use Reranking
+
+### Multi-Vector Search
+
+When querying multiple vector fields (e.g., title embeddings and content embeddings), reranking helps combine the results into a unified ranking:
+
+```python
+from zvec import Collection
+from zvec.extension import RrfReRanker
+
+collection = Collection("products")
+reranker = RrfReRanker(topn=10)
+
+results = collection.query(
+    vectors={"title_vec": query_title_emb, "desc_vec": query_desc_emb},
+    reranker=reranker
+)
+```
+
+### Semantic Relevance
+
+For search scenarios requiring deep semantic understanding, model-based rerankers can provide more accurate relevance scores:
+
+```python
+from zvec.extension import QwenReRanker
+
+reranker = QwenReRanker(
+    query="machine learning algorithms",
+    topn=5,
+    rerank_field="content"
+)
+
+results = collection.query(
+    vectors={"content_vec": query_embedding},
+    reranker=reranker
+)
+```
+
+## Available Rerankers
+
+Zvec provides several reranking strategies:
+
+<CardGroup cols={2}>
+  <Card title="RrfReRanker" icon="layer-group" href="/api/reranking/rrf">
+    Reciprocal Rank Fusion for combining multi-vector results
+  </Card>
+  <Card title="WeightedReRanker" icon="balance-scale" href="/api/reranking/weighted">
+    Weighted score combination with configurable field weights
+  </Card>
+  <Card title="QwenReRanker" icon="brain" href="/api/reranking/qwen">
+    Model-based semantic reranking using Qwen/DashScope API
+  </Card>
+</CardGroup>
+
+## ReRanker Base Class
+
+<ParamField path="RerankFunction" type="class">
+  Abstract base class for all rerankers.
+</ParamField>
+
+### Constructor
+
+```python
+RerankFunction(topn=10, rerank_field=None)
+```
+
+<ParamField path="topn" type="int" default="10">
+  Number of top documents to return after reranking.
+</ParamField>
+
+<ParamField path="rerank_field" type="str | None" default="None">
+  Field name used as input for reranking (e.g., document title or body). Required for some rerankers like `QwenReRanker`.
+</ParamField>
+
+### Properties
+
+<ResponseField name="topn" type="int">
+  Number of top documents to return after reranking.
+</ResponseField>
+
+<ResponseField name="rerank_field" type="str | None">
+  Field name used as reranking input.
+</ResponseField>
+
+### Methods
+
+#### rerank()
+
+```python
+def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]
+```
+
+Re-rank documents from one or more vector queries.
+
+<ParamField path="query_results" type="dict[str, list[Doc]]">
+  Mapping from vector field name to list of retrieved documents (sorted by relevance).
+</ParamField>
+
+<ResponseField name="returns" type="list[Doc]">
+  Re-ranked list of documents (length ≤ `topn`), with updated `score` fields.
+</ResponseField>
+
+<Note>
+  Subclasses must implement the `rerank()` method.
+</Note>

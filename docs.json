@@ -1,122 +1,179 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Zvec",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#6165fc",
+    "light": "#040404",
+    "dark": "#4204fc"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/4d96ac52-4c9c-46eb-adaf-8d244b2fbd4a.png",
+  "logo": {
+    "light": "https://media.brand.dev/843fb802-a8f2-485d-8d2f-16637559c081.svg",
+    "dark": "https://media.brand.dev/843fb802-a8f2-485d-8d2f-16637559c081.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/alibaba/zvec"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/alibaba/zvec"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/collections",
+              "concepts/schemas",
+              "concepts/vectors",
+              "concepts/indexing",
+              "concepts/querying"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/dense-vectors",
+              "guides/sparse-vectors",
+              "guides/hybrid-search",
+              "guides/filtering",
+              "guides/embeddings",
+              "guides/performance-tuning"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Integrations",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "integrations/openai",
+              "integrations/qwen",
+              "integrations/sentence-transformers",
+              "integrations/bm25"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/index-types",
+              "advanced/quantization",
+              "advanced/reranking",
+              "advanced/multi-vector",
+              "advanced/building-from-source"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Initialization",
             "pages": [
-              "api-reference/introduction"
+              "api/init",
+              "api/create-and-open",
+              "api/open"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Collection",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/collection/overview",
+              "api/collection/insert",
+              "api/collection/query",
+              "api/collection/update",
+              "api/collection/delete",
+              "api/collection/schema-management"
+            ]
+          },
+          {
+            "group": "Schema Types",
+            "pages": [
+              "api/schema/collection-schema",
+              "api/schema/vector-schema",
+              "api/schema/field-schema",
+              "api/schema/data-types"
+            ]
+          },
+          {
+            "group": "Query Types",
+            "pages": [
+              "api/query/vector-query",
+              "api/query/hnsw-params",
+              "api/query/ivf-params"
+            ]
+          },
+          {
+            "group": "Index Parameters",
+            "pages": [
+              "api/index/hnsw",
+              "api/index/ivf",
+              "api/index/flat",
+              "api/index/inverted"
+            ]
+          },
+          {
+            "group": "Embedding Functions",
+            "pages": [
+              "api/embeddings/overview",
+              "api/embeddings/dense",
+              "api/embeddings/sparse",
+              "api/embeddings/openai",
+              "api/embeddings/qwen",
+              "api/embeddings/sentence-transformers",
+              "api/embeddings/bm25"
+            ]
+          },
+          {
+            "group": "Re-ranking",
+            "pages": [
+              "api/reranking/overview",
+              "api/reranking/rrf",
+              "api/reranking/weighted",
+              "api/reranking/qwen"
+            ]
+          },
+          {
+            "group": "Types & Enums",
+            "pages": [
+              "api/types/data-type",
+              "api/types/metric-type",
+              "api/types/quantize-type",
+              "api/types/index-type",
+              "api/types/status"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Additional Resources",
+            "pages": [
+              "resources/benchmarks",
+              "resources/examples",
+              "resources/faq",
+              "resources/troubleshooting",
+              "resources/contributing"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

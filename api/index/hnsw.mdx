@@ -1,0 +1,208 @@
+---
+title: 'HnswIndexParam'
+description: 'Parameters for configuring HNSW vector indexes'
+---
+
+## Overview
+
+The `HnswIndexParam` class configures an HNSW (Hierarchical Navigable Small World) index. HNSW is a graph-based approximate nearest neighbor search algorithm that offers excellent performance and accuracy for high-dimensional vector search.
+
+## Constructor
+
+```python
+HnswIndexParam(
+    metric_type: MetricType = MetricType.IP,
+    m: int = 50,
+    ef_construction: int = 500,
+    quantize_type: QuantizeType = QuantizeType.UNDEFINED
+)
+```
+
+## Parameters
+
+<ParamField path="metric_type" type="MetricType" default="MetricType.IP">
+  Distance metric used for similarity computation. Options:
+  - `MetricType.IP` - Inner product (default)
+  - `MetricType.L2` - Euclidean distance
+  - `MetricType.COSINE` - Cosine similarity
+</ParamField>
+
+<ParamField path="m" type="int" default="50">
+  Number of bi-directional links created for every new element during construction. This is the most important parameter for HNSW.
+  
+  **Effects:**
+  - Higher values improve search accuracy and recall
+  - Higher values increase memory usage and construction time
+  - Typical range: 8-64
+  - Default of 50 works well for most use cases
+</ParamField>
+
+<ParamField path="ef_construction" type="int" default="500">
+  Size of the dynamic candidate list for nearest neighbors during index construction. Controls the quality of the graph structure.
+  
+  **Effects:**
+  - Larger values yield better graph quality and search accuracy
+  - Larger values increase index construction time
+  - Should be at least as large as `m`, typically much larger
+  - Typical range: 100-1000
+</ParamField>
+
+<ParamField path="quantize_type" type="QuantizeType" default="QuantizeType.UNDEFINED">
+  Optional quantization type for vector compression. Options:
+  - `QuantizeType.UNDEFINED` - No quantization (default)
+  - `QuantizeType.FP16` - 16-bit floating point
+  - `QuantizeType.INT8` - 8-bit integer quantization
+  
+  Quantization reduces memory usage but may slightly reduce accuracy.
+</ParamField>
+
+## Properties
+
+### m
+
+Maximum number of neighbors per node in upper layers of the graph.
+
+**Type:** `int`
+
+### ef_construction
+
+Candidate list size during index construction.
+
+**Type:** `int`
+
+## Methods
+
+### to_dict()
+
+Convert the index parameters to a dictionary representation.
+
+**Returns:** `dict` - Dictionary with all index parameter fields.
+
+## Examples
+
+### Basic HNSW index
+
+```python
+from zvec import HnswIndexParam
+from zvec.typing import MetricType
+
+# Create index with default parameters
+index_params = HnswIndexParam(
+    metric_type=MetricType.COSINE
+)
+```
+
+### High accuracy configuration
+
+```python
+from zvec import HnswIndexParam
+from zvec.typing import MetricType
+
+# Optimize for accuracy (higher m and ef_construction)
+index_params = HnswIndexParam(
+    metric_type=MetricType.COSINE,
+    m=64,
+    ef_construction=800
+)
+```
+
+### Memory-efficient configuration
+
+```python
+from zvec import HnswIndexParam
+from zvec.typing import MetricType, QuantizeType
+
+# Reduce memory usage with quantization and lower m
+index_params = HnswIndexParam(
+    metric_type=MetricType.IP,
+    m=16,
+    ef_construction=200,
+    quantize_type=QuantizeType.FP16
+)
+```
+
+### Fast construction configuration
+
+```python
+from zvec import HnswIndexParam
+from zvec.typing import MetricType
+
+# Faster index building (lower ef_construction)
+index_params = HnswIndexParam(
+    metric_type=MetricType.L2,
+    m=32,
+    ef_construction=200
+)
+```
+
+### Using with a collection
+
+```python
+import zvec
+from zvec import HnswIndexParam
+from zvec.typing import MetricType, DataType
+
+# Create a collection with HNSW index
+collection = zvec.create_collection(
+    path="./my_collection",
+    dimension=768,
+    data_type=DataType.FLOAT32,
+    index_param=HnswIndexParam(
+        metric_type=MetricType.COSINE,
+        m=50,
+        ef_construction=500
+    )
+)
+```
+
+## Performance Tuning
+
+<Tip>
+  **Recommended starting values:**
+  - General purpose: `m=50`, `ef_construction=500`
+  - High accuracy: `m=64`, `ef_construction=800`
+  - Fast construction: `m=32`, `ef_construction=200`
+  - Memory constrained: `m=16`, `ef_construction=200`, `quantize_type=FP16`
+</Tip>
+
+<Info>
+  **Parameter relationships:**
+  - `ef_construction` should typically be 5-20x larger than `m`
+  - Higher `m` increases memory usage by approximately `m * 4 * dimension` bytes per vector
+  - Construction time increases roughly linearly with `ef_construction`
+</Info>
+
+## Memory Usage
+
+Approximate memory per vector:
+
+```
+Memory = dimension * bytes_per_element * (1 + m * 4 / dimension)
+```
+
+Where:
+- `bytes_per_element` = 4 for FLOAT32, 2 for FP16, 1 for INT8
+- `m` is the HNSW parameter
+
+## When to Use HNSW
+
+<Check>
+  **HNSW is ideal for:**
+  - High-dimensional vectors (100+ dimensions)
+  - Scenarios requiring high recall (>95%)
+  - Real-time search applications
+  - When you have sufficient memory
+</Check>
+
+<Warning>
+  **Consider alternatives for:**
+  - Very large datasets (billions of vectors) - consider IVF with quantization
+  - Memory-constrained environments - consider IVF or Flat with quantization
+  - Perfect accuracy required - use Flat index
+</Warning>
+
+## See Also
+
+- [HnswQueryParam](/api/query/hnsw-params) - Query parameters for HNSW searches
+- [IVFIndexParam](/api/index/ivf) - Alternative index type for large datasets
+- [FlatIndexParam](/api/index/flat) - Exact search alternative

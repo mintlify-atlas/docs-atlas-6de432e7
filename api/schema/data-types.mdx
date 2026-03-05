@@ -1,0 +1,364 @@
+---
+title: "DataType"
+description: "Enumeration of all supported data types in Zvec"
+---
+
+## Overview
+
+`DataType` is an enumeration that defines all supported data types for fields and vectors in Zvec. Choose the appropriate data type based on your data characteristics and performance requirements.
+
+## Import
+
+```python
+from zvec import DataType
+from zvec.typing import DataType  # Alternative import
+```
+
+## Vector Data Types
+
+Vector data types are used for similarity search fields.
+
+### Dense Vectors
+
+<ResponseField name="VECTOR_FP32" type="DataType">
+  32-bit floating point vectors. Most commonly used for dense embeddings from models like OpenAI, BERT, or Sentence Transformers.
+  
+  **Use when**: Standard precision embeddings, most ML models
+  
+  **Memory**: 4 bytes per dimension
+</ResponseField>
+
+<ResponseField name="VECTOR_FP16" type="DataType">
+  16-bit floating point vectors. Provides 50% memory savings with minimal accuracy loss.
+  
+  **Use when**: Memory constraints, large-scale deployments
+  
+  **Memory**: 2 bytes per dimension
+</ResponseField>
+
+<ResponseField name="VECTOR_FP64" type="DataType">
+  64-bit floating point vectors. High precision for scientific applications.
+  
+  **Use when**: Extreme precision requirements
+  
+  **Memory**: 8 bytes per dimension
+</ResponseField>
+
+<ResponseField name="VECTOR_INT8" type="DataType">
+  8-bit integer vectors. Quantized vectors for maximum memory efficiency.
+  
+  **Use when**: Extreme memory constraints, post-quantization
+  
+  **Memory**: 1 byte per dimension
+</ResponseField>
+
+### Sparse Vectors
+
+<ResponseField name="SPARSE_VECTOR_FP32" type="DataType">
+  32-bit sparse vectors. Stores only non-zero values with their indices.
+  
+  **Use when**: BM25, TF-IDF, or sparse embeddings (e.g., SPLADE)
+  
+  **Memory**: Depends on sparsity
+</ResponseField>
+
+<ResponseField name="SPARSE_VECTOR_FP16" type="DataType">
+  16-bit sparse vectors. Memory-efficient sparse representation.
+  
+  **Use when**: Sparse embeddings with memory constraints
+  
+  **Memory**: Depends on sparsity
+</ResponseField>
+
+## Scalar Data Types
+
+Scalar data types are used for metadata fields and filtering.
+
+### Integer Types
+
+<ResponseField name="INT32" type="DataType">
+  32-bit signed integer.
+  
+  **Range**: -2,147,483,648 to 2,147,483,647
+  
+  **Use when**: Counters, small IDs, enum values
+</ResponseField>
+
+<ResponseField name="INT64" type="DataType">
+  64-bit signed integer.
+  
+  **Range**: -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
+  
+  **Use when**: Large IDs, timestamps, large counters
+</ResponseField>
+
+<ResponseField name="UINT32" type="DataType">
+  32-bit unsigned integer.
+  
+  **Range**: 0 to 4,294,967,295
+  
+  **Use when**: Always-positive values, IDs
+</ResponseField>
+
+<ResponseField name="UINT64" type="DataType">
+  64-bit unsigned integer.
+  
+  **Range**: 0 to 18,446,744,073,709,551,615
+  
+  **Use when**: Large always-positive values, hash values
+</ResponseField>
+
+### Floating Point Types
+
+<ResponseField name="FLOAT" type="DataType">
+  32-bit floating point number.
+  
+  **Use when**: Prices, scores, measurements
+</ResponseField>
+
+<ResponseField name="DOUBLE" type="DataType">
+  64-bit floating point number.
+  
+  **Use when**: High-precision calculations, scientific data
+</ResponseField>
+
+### Text and Boolean
+
+<ResponseField name="STRING" type="DataType">
+  Variable-length UTF-8 string.
+  
+  **Use when**: Text fields, IDs, categories, descriptions
+</ResponseField>
+
+<ResponseField name="BOOL" type="DataType">
+  Boolean value (true or false).
+  
+  **Use when**: Flags, binary states
+</ResponseField>
+
+## Array Data Types
+
+Array types store multiple values in a single field.
+
+<ResponseField name="ARRAY_INT32" type="DataType">
+  Array of 32-bit signed integers.
+  
+  **Use when**: Multiple small integer values per document
+</ResponseField>
+
+<ResponseField name="ARRAY_INT64" type="DataType">
+  Array of 64-bit signed integers.
+  
+  **Use when**: Lists of large IDs, multiple timestamps
+</ResponseField>
+
+<ResponseField name="ARRAY_UINT32" type="DataType">
+  Array of 32-bit unsigned integers.
+</ResponseField>
+
+<ResponseField name="ARRAY_UINT64" type="DataType">
+  Array of 64-bit unsigned integers.
+</ResponseField>
+
+<ResponseField name="ARRAY_FLOAT" type="DataType">
+  Array of 32-bit floating point numbers.
+  
+  **Use when**: Multiple scores, ratings, measurements
+</ResponseField>
+
+<ResponseField name="ARRAY_DOUBLE" type="DataType">
+  Array of 64-bit floating point numbers.
+</ResponseField>
+
+<ResponseField name="ARRAY_STRING" type="DataType">
+  Array of strings.
+  
+  **Use when**: Tags, categories, multiple text values
+</ResponseField>
+
+<ResponseField name="ARRAY_BOOL" type="DataType">
+  Array of boolean values.
+</ResponseField>
+
+## Examples
+
+### Vector field types
+
+```python
+from zvec import VectorSchema, DataType
+
+# Standard embeddings (OpenAI, BERT, etc.)
+vector_fp32 = VectorSchema(
+    "text_embedding",
+    DataType.VECTOR_FP32,
+    dimension=768
+)
+
+# Memory-efficient embeddings
+vector_fp16 = VectorSchema(
+    "image_embedding",
+    DataType.VECTOR_FP16,
+    dimension=512
+)
+
+# Sparse vectors (BM25, TF-IDF)
+sparse_vector = VectorSchema(
+    "bm25_embedding",
+    DataType.SPARSE_VECTOR_FP32
+)
+```
+
+### Scalar field types
+
+```python
+from zvec import FieldSchema, DataType
+
+# Integer fields
+id_field = FieldSchema("id", DataType.INT64)
+count_field = FieldSchema("view_count", DataType.INT32)
+timestamp_field = FieldSchema("created_at", DataType.INT64)
+
+# Float fields
+price_field = FieldSchema("price", DataType.FLOAT)
+score_field = FieldSchema("relevance_score", DataType.DOUBLE)
+
+# Text fields
+title_field = FieldSchema("title", DataType.STRING)
+category_field = FieldSchema("category", DataType.STRING)
+
+# Boolean field
+is_active_field = FieldSchema("is_active", DataType.BOOL)
+```
+
+### Array field types
+
+```python
+from zvec import FieldSchema, DataType
+
+# String arrays
+tags_field = FieldSchema("tags", DataType.ARRAY_STRING)
+categories_field = FieldSchema("categories", DataType.ARRAY_STRING)
+
+# Numeric arrays
+ratings_field = FieldSchema("ratings", DataType.ARRAY_FLOAT)
+related_ids_field = FieldSchema("related_ids", DataType.ARRAY_INT64)
+
+# Boolean array
+features_field = FieldSchema("features_enabled", DataType.ARRAY_BOOL)
+```
+
+### Complete schema example
+
+```python
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+
+schema = CollectionSchema(
+    name="documents",
+    fields=[
+        # IDs and identifiers
+        FieldSchema("doc_id", DataType.STRING),
+        FieldSchema("user_id", DataType.INT64),
+        
+        # Metadata
+        FieldSchema("title", DataType.STRING),
+        FieldSchema("author", DataType.STRING, nullable=True),
+        FieldSchema("created_at", DataType.INT64),
+        
+        # Metrics
+        FieldSchema("view_count", DataType.INT32),
+        FieldSchema("rating", DataType.FLOAT),
+        
+        # Arrays
+        FieldSchema("tags", DataType.ARRAY_STRING),
+        FieldSchema("related_doc_ids", DataType.ARRAY_STRING),
+        
+        # Flags
+        FieldSchema("is_published", DataType.BOOL)
+    ],
+    vectors=[
+        # Dense vectors
+        VectorSchema("text_embedding", DataType.VECTOR_FP32, dimension=768),
+        VectorSchema("image_embedding", DataType.VECTOR_FP16, dimension=512),
+        
+        # Sparse vectors
+        VectorSchema("bm25_embedding", DataType.SPARSE_VECTOR_FP32)
+    ]
+)
+```
+
+## Type Selection Guide
+
+### For Vector Embeddings
+
+| Model / Use Case | Recommended Type | Notes |
+|-----------------|------------------|-------|
+| OpenAI embeddings | `VECTOR_FP32` | Standard precision |
+| Sentence Transformers | `VECTOR_FP32` | Standard precision |
+| CLIP image embeddings | `VECTOR_FP32` or `VECTOR_FP16` | FP16 for memory savings |
+| BM25 / TF-IDF | `SPARSE_VECTOR_FP32` | Sparse representation |
+| SPLADE | `SPARSE_VECTOR_FP32` | Learned sparse embeddings |
+| Memory-constrained | `VECTOR_FP16` or `VECTOR_INT8` | Trade accuracy for memory |
+
+### For Metadata Fields
+
+| Data | Recommended Type | Example |
+|------|------------------|---------||
+| Document IDs | `STRING` or `INT64` | "doc_123" or 123456789 |
+| UUIDs | `STRING` | "550e8400-e29b-41d4-a716-446655440000" |
+| Timestamps | `INT64` | 1709625600 (Unix timestamp) |
+| Categories | `STRING` | "technology", "sports" |
+| Tags | `ARRAY_STRING` | ["python", "machine-learning"] |
+| Prices | `FLOAT` | 19.99 |
+| View counts | `INT32` or `INT64` | 1000 |
+| Flags | `BOOL` | true, false |
+| Ratings | `FLOAT` or `ARRAY_FLOAT` | 4.5 or [4.0, 5.0, 3.5] |
+
+<Tip>
+**Memory vs Precision Trade-offs**:
+- `VECTOR_FP32` → `VECTOR_FP16`: 50% memory reduction, &lt;1% accuracy loss
+- `VECTOR_FP32` → `VECTOR_INT8`: 75% memory reduction, 1-3% accuracy loss
+- For most applications, `VECTOR_FP16` provides the best balance
+</Tip>
+
+<Note>
+**Sparse Vectors**: Sparse vector types (`SPARSE_VECTOR_FP32`, `SPARSE_VECTOR_FP16`) automatically handle sparse representations. You don't need to specify dimensions upfront.
+</Note>
+
+## Checking Data Types
+
+```python
+from zvec import DataType
+
+# Check if a DataType is a vector type
+vector_types = [
+    DataType.VECTOR_FP32,
+    DataType.VECTOR_FP16,
+    DataType.VECTOR_FP64,
+    DataType.VECTOR_INT8,
+    DataType.SPARSE_VECTOR_FP32,
+    DataType.SPARSE_VECTOR_FP16
+]
+
+scalar_types = [
+    DataType.INT32, DataType.INT64,
+    DataType.UINT32, DataType.UINT64,
+    DataType.FLOAT, DataType.DOUBLE,
+    DataType.STRING, DataType.BOOL
+]
+
+# Access enum name and value
+data_type = DataType.VECTOR_FP32
+print(data_type.name)   # "VECTOR_FP32"
+print(data_type.value)  # Numeric value
+
+# Compare data types
+if field.data_type == DataType.STRING:
+    print("This is a string field")
+```
+
+## See Also
+
+- [FieldSchema](/api/schema/field-schema) - Using scalar data types
+- [VectorSchema](/api/schema/vector-schema) - Using vector data types
+- [CollectionSchema](/api/schema/collection-schema) - Combining fields and vectors
+- [Performance Guide](/guides/performance-tuning) - Optimizing data type selection

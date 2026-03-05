@@ -1,0 +1,275 @@
+---
+title: 'IVFIndexParam'
+description: 'Parameters for configuring IVF vector indexes'
+---
+
+## Overview
+
+The `IVFIndexParam` class configures an IVF (Inverted File Index) index. IVF partitions the vector space into clusters and performs approximate nearest neighbor search by searching only a subset of clusters, providing a good balance between speed and accuracy for large datasets.
+
+## Constructor
+
+```python
+IVFIndexParam(
+    metric_type: MetricType = MetricType.IP,
+    n_list: int = 0,
+    n_iters: int = 10,
+    use_soar: bool = False,
+    quantize_type: QuantizeType = QuantizeType.UNDEFINED
+)
+```
+
+## Parameters
+
+<ParamField path="metric_type" type="MetricType" default="MetricType.IP">
+  Distance metric used for similarity computation. Options:
+  - `MetricType.IP` - Inner product (default)
+  - `MetricType.L2` - Euclidean distance
+  - `MetricType.COSINE` - Cosine similarity
+</ParamField>
+
+<ParamField path="n_list" type="int" default="0">
+  Number of clusters (inverted lists) to partition the dataset into. This is the primary parameter for IVF indexes.
+  
+  **Effects:**
+  - More clusters improve search speed but may reduce accuracy
+  - Fewer clusters improve accuracy but slow down search
+  - Set to 0 for automatic selection based on dataset size
+  - Typical range: sqrt(N) to N/100, where N is the number of vectors
+  
+  **Auto-selection (n_list=0):**
+  When set to 0, the system automatically chooses an optimal value based on your dataset size.
+</ParamField>
+
+<ParamField path="n_iters" type="int" default="10">
+  Number of iterations for k-means clustering during index training. More iterations yield more stable and accurate centroids.
+  
+  **Effects:**
+  - Higher values improve cluster quality
+  - Higher values increase index construction time
+  - Typical range: 10-50
+  - Default of 10 works well for most cases
+</ParamField>
+
+<ParamField path="use_soar" type="bool" default="False">
+  Whether to enable SOAR (Scalable Optimized Adaptive Routing) for improved IVF search performance.
+  
+  SOAR is an optimization technique that can improve query performance by adaptively routing queries to the most relevant clusters.
+</ParamField>
+
+<ParamField path="quantize_type" type="QuantizeType" default="QuantizeType.UNDEFINED">
+  Optional quantization type for vector compression. Options:
+  - `QuantizeType.UNDEFINED` - No quantization (default)
+  - `QuantizeType.FP16` - 16-bit floating point
+  - `QuantizeType.INT8` - 8-bit integer quantization
+  
+  Quantization can significantly reduce memory usage, especially important for large IVF indexes.
+</ParamField>
+
+## Properties
+
+### n_list
+
+Number of inverted lists (clusters). Returns 0 if auto-selection is enabled.
+
+**Type:** `int`
+
+### n_iters
+
+Number of k-means iterations during training.
+
+**Type:** `int`
+
+### use_soar
+
+Whether SOAR optimization is enabled.
+
+**Type:** `bool`
+
+## Methods
+
+### to_dict()
+
+Convert the index parameters to a dictionary representation.
+
+**Returns:** `dict` - Dictionary with all index parameter fields.
+
+## Examples
+
+### Basic IVF index with auto-selection
+
+```python
+from zvec import IVFIndexParam
+from zvec.typing import MetricType
+
+# Create index with automatic n_list selection
+index_params = IVFIndexParam(
+    metric_type=MetricType.COSINE
+)
+```
+
+### Explicit cluster count
+
+```python
+from zvec import IVFIndexParam
+from zvec.typing import MetricType
+
+# Manually set number of clusters
+index_params = IVFIndexParam(
+    metric_type=MetricType.COSINE,
+    n_list=100,
+    n_iters=15
+)
+```
+
+### High accuracy configuration
+
+```python
+from zvec import IVFIndexParam
+from zvec.typing import MetricType
+
+# Use fewer clusters for higher accuracy
+index_params = IVFIndexParam(
+    metric_type=MetricType.IP,
+    n_list=50,
+    n_iters=25,
+    use_soar=True
+)
+```
+
+### Memory-efficient configuration
+
+```python
+from zvec import IVFIndexParam
+from zvec.typing import MetricType, QuantizeType
+
+# Use quantization to reduce memory usage
+index_params = IVFIndexParam(
+    metric_type=MetricType.L2,
+    n_list=100,
+    quantize_type=QuantizeType.INT8
+)
+```
+
+### Large dataset configuration
+
+```python
+from zvec import IVFIndexParam
+from zvec.typing import MetricType, QuantizeType
+
+# Optimize for millions of vectors
+index_params = IVFIndexParam(
+    metric_type=MetricType.COSINE,
+    n_list=1000,
+    n_iters=20,
+    use_soar=True,
+    quantize_type=QuantizeType.FP16
+)
+```
+
+### Using with a collection
+
+```python
+import zvec
+from zvec import IVFIndexParam
+from zvec.typing import MetricType, DataType
+
+# Create a collection with IVF index
+collection = zvec.create_collection(
+    path="./my_collection",
+    dimension=768,
+    data_type=DataType.FLOAT32,
+    index_param=IVFIndexParam(
+        metric_type=MetricType.COSINE,
+        n_list=100,
+        use_soar=True
+    )
+)
+```
+
+## Performance Tuning
+
+<Tip>
+  **Choosing n_list:**
+  - Small datasets (under 100K vectors): 50-100 clusters
+  - Medium datasets (100K-1M vectors): sqrt(N) clusters
+  - Large datasets (over 1M vectors): N/100 to N/1000 clusters
+  - Start with `n_list=0` (auto) and adjust based on performance metrics
+</Tip>
+
+<Info>
+  **Training time vs search performance:**
+  - Higher `n_iters` improves cluster quality but increases index build time
+  - Use `n_iters=10` for quick experiments
+  - Use `n_iters=20-50` for production deployments
+  - The training cost is paid once during index construction
+</Info>
+
+## Memory Usage
+
+Approximate memory per vector:
+
+```
+Memory = dimension * bytes_per_element + overhead
+```
+
+Where:
+- `bytes_per_element` = 4 for FLOAT32, 2 for FP16, 1 for INT8
+- `overhead` = small constant for cluster metadata
+
+IVF indexes are generally more memory-efficient than HNSW, especially with quantization.
+
+## Query Time Configuration
+
+At query time, use [IVFQueryParam](/api/query/ivf-params) to control the number of clusters searched:
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Search more clusters for higher accuracy
+params = IVFQueryParam(nprobe=20)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+## When to Use IVF
+
+<Check>
+  **IVF is ideal for:**
+  - Large datasets (millions to billions of vectors)
+  - Memory-constrained environments (especially with quantization)
+  - Scenarios where moderate recall (85-95%) is acceptable
+  - Cost-sensitive deployments
+</Check>
+
+<Warning>
+  **Consider alternatives for:**
+  - Small datasets (under 10K vectors) - use Flat or HNSW
+  - Need highest accuracy (over 98% recall) - use HNSW
+  - Real-time requirements with very low latency - use HNSW
+</Warning>
+
+## SOAR Optimization
+
+SOAR (Scalable Optimized Adaptive Routing) is an advanced optimization that:
+- Adaptively routes queries to the most relevant clusters
+- Can improve search speed without sacrificing accuracy
+- Recommended for production deployments with large datasets
+
+```python
+index_params = IVFIndexParam(
+    metric_type=MetricType.COSINE,
+    n_list=1000,
+    use_soar=True
+)
+```
+
+## See Also
+
+- [IVFQueryParam](/api/query/ivf-params) - Query parameters for IVF searches
+- [HnswIndexParam](/api/index/hnsw) - Alternative for high-accuracy scenarios
+- [FlatIndexParam](/api/index/flat) - Exact search alternative

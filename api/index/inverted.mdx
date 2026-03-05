@@ -1,0 +1,344 @@
+---
+title: 'InvertIndexParam'
+description: 'Parameters for configuring inverted indexes for sparse vectors and text search'
+---
+
+## Overview
+
+The `InvertIndexParam` class configures an inverted index (also called an invert index) for sparse vector indexing and text search. Unlike dense vector indexes (HNSW, IVF, Flat), inverted indexes are optimized for sparse vectors commonly used in keyword search, BM25, and hybrid retrieval scenarios.
+
+## Constructor
+
+```python
+InvertIndexParam(
+    enable_range_optimization: bool = False,
+    enable_extended_wildcard: bool = False
+)
+```
+
+## Parameters
+
+<ParamField path="enable_range_optimization" type="bool" default="False">
+  Whether to enable range query optimization for the inverted index.
+  
+  When enabled, range queries (e.g., finding documents with values in a specific range) are optimized with specialized data structures. This can significantly improve performance for numeric range queries.
+</ParamField>
+
+<ParamField path="enable_extended_wildcard" type="bool" default="False">
+  Whether to enable extended wildcard search including suffix and infix patterns.
+  
+  **Wildcard patterns:**
+  - Prefix search (e.g., `"test*"`) is always enabled regardless of this setting
+  - Suffix search (e.g., `"*test"`) requires this setting to be enabled
+  - Infix search (e.g., `"*test*"`) requires this setting to be enabled
+  
+  **Trade-offs:**
+  - Enabling this increases index size and build time
+  - Provides more flexible text search capabilities
+  - Recommended for text search and fuzzy matching use cases
+</ParamField>
+
+## Properties
+
+### enable_range_optimization
+
+Whether range optimization is enabled for this inverted index.
+
+**Type:** `bool`
+
+### enable_extended_wildcard
+
+Whether extended wildcard (suffix and infix) search is enabled.
+
+**Type:** `bool`
+
+## Methods
+
+### to_dict()
+
+Convert the index parameters to a dictionary representation.
+
+**Returns:** `dict` - Dictionary with all index parameter fields.
+
+## Examples
+
+### Basic inverted index
+
+```python
+from zvec import InvertIndexParam
+
+# Create inverted index with default settings
+index_params = InvertIndexParam()
+```
+
+### Enable range optimization
+
+```python
+from zvec import InvertIndexParam
+
+# Optimize for numeric range queries
+index_params = InvertIndexParam(
+    enable_range_optimization=True
+)
+```
+
+### Enable extended wildcard search
+
+```python
+from zvec import InvertIndexParam
+
+# Enable suffix and infix wildcard patterns
+index_params = InvertIndexParam(
+    enable_extended_wildcard=True
+)
+```
+
+### Full-featured text search index
+
+```python
+from zvec import InvertIndexParam
+
+# Enable all optimizations for comprehensive text search
+index_params = InvertIndexParam(
+    enable_range_optimization=True,
+    enable_extended_wildcard=True
+)
+```
+
+### Using with a collection
+
+```python
+import zvec
+from zvec import InvertIndexParam
+
+# Create a collection with inverted index for sparse vectors
+collection = zvec.create_collection(
+    path="./text_search_collection",
+    index_param=InvertIndexParam(
+        enable_extended_wildcard=True
+    )
+)
+```
+
+## Use Cases
+
+### 1. Sparse Vector Search
+
+Inverted indexes are optimized for sparse vectors used in information retrieval:
+
+```python
+from zvec import InvertIndexParam
+
+# BM25 or TF-IDF sparse embeddings
+index_params = InvertIndexParam()
+
+# Sparse vectors have most values as zero
+sparse_vector = {
+    15: 0.8,    # dimension 15, value 0.8
+    42: 1.2,    # dimension 42, value 1.2
+    103: 0.5    # dimension 103, value 0.5
+    # other dimensions are implicitly 0
+}
+```
+
+### 2. Keyword Search
+
+Enable wildcard patterns for flexible text matching:
+
+```python
+from zvec import InvertIndexParam
+
+# Text search with wildcard support
+index_params = InvertIndexParam(
+    enable_extended_wildcard=True
+)
+
+# Supports queries like:
+# - "test*"     (prefix: test, testing, tester)
+# - "*ing"      (suffix: testing, running, walking)
+# - "*test*"    (infix: testing, contest, latest)
+```
+
+### 3. Hybrid Retrieval
+
+Combine dense and sparse vector search:
+
+```python
+import zvec
+from zvec import HnswIndexParam, InvertIndexParam
+from zvec.typing import MetricType
+
+# Dense vector field with HNSW
+dense_index = HnswIndexParam(
+    metric_type=MetricType.COSINE
+)
+
+# Sparse vector field with inverted index
+sparse_index = InvertIndexParam()
+
+# Use both in multi-field collection for hybrid search
+```
+
+### 4. Document Filtering
+
+Use range optimization for numeric filters:
+
+```python
+from zvec import InvertIndexParam
+
+# Optimize for filtering by price, date, etc.
+index_params = InvertIndexParam(
+    enable_range_optimization=True
+)
+
+# Efficient queries like:
+# - price >= 100 AND price <= 500
+# - date > "2024-01-01"
+```
+
+## Performance Characteristics
+
+### Time Complexity
+
+- **Search time:** O(k * log(n))
+  - k = number of non-zero dimensions in query
+  - n = number of documents
+- **Index build time:** O(m * d)
+  - m = number of documents
+  - d = average number of non-zero dimensions
+- **Insert time:** O(d * log(n))
+  - d = number of non-zero dimensions
+
+### Space Complexity
+
+- **Memory:** Proportional to total number of non-zero entries across all documents
+- Much more efficient than dense indexes for sparse data
+
+## When to Use Inverted Index
+
+<Check>
+  **Inverted index is ideal for:**
+  - Sparse vector search (BM25, TF-IDF)
+  - Keyword and text search
+  - Hybrid retrieval (combining dense and sparse)
+  - Document filtering with numeric ranges
+  - High-dimensional sparse data (e.g., 10,000+ dimensions with &lt;1% non-zero)
+</Check>
+
+<Warning>
+  **Do NOT use inverted index for:**
+  - Dense vector search - use HNSW or IVF instead
+  - Low-dimensional dense embeddings
+  - Image or audio embeddings (typically dense)
+</Warning>
+
+## Comparison: Dense vs Sparse Indexes
+
+| Feature | Inverted (Sparse) | HNSW/IVF (Dense) |
+|---------|-------------------|------------------|
+| **Best for** | Sparse vectors | Dense vectors |
+| **Memory** | Only non-zero values | All dimensions |
+| **Typical use** | Text, keywords | Semantic search |
+| **Dimensions** | 1000s-100,000s | 100-2000 |
+| **Sparsity** | &gt;95% zeros | &lt;10% zeros |
+
+## Wildcard Search Examples
+
+### Prefix Search (Always Enabled)
+
+```python
+# Prefix search works with any InvertIndexParam
+index_params = InvertIndexParam()
+
+# Matches: "test", "testing", "tester", "tests"
+query = "test*"
+```
+
+### Suffix and Infix Search (Requires enable_extended_wildcard)
+
+```python
+# Enable extended wildcards
+index_params = InvertIndexParam(
+    enable_extended_wildcard=True
+)
+
+# Suffix: matches "testing", "running", "walking"
+suffix_query = "*ing"
+
+# Infix: matches "testing", "contest", "latest"
+infix_query = "*test*"
+```
+
+## Optimization Trade-offs
+
+<Info>
+  **Range optimization:**
+  - Adds ~10-20% to index size
+  - Improves range query performance by 5-10x
+  - Recommended if you have numeric filters
+</Info>
+
+<Info>
+  **Extended wildcard:**
+  - Adds ~30-50% to index size
+  - Increases index build time by ~2x
+  - Enables flexible text matching patterns
+  - Recommended for text search applications
+</Info>
+
+## Sparse Vector Format
+
+Sparse vectors are typically represented as dictionaries or lists of (index, value) pairs:
+
+```python
+# Dictionary format (dimension -> value)
+sparse_dict = {
+    15: 0.8,
+    42: 1.2,
+    103: 0.5
+}
+
+# List of tuples format
+sparse_list = [
+    (15, 0.8),
+    (42, 1.2),
+    (103, 0.5)
+]
+```
+
+## Hybrid Search Pattern
+
+Combine inverted index (sparse) with dense vector index for best results:
+
+```python
+import zvec
+from zvec import HnswIndexParam, InvertIndexParam, VectorQuery
+from zvec.typing import MetricType
+
+# Dense semantic search
+dense_query = VectorQuery(
+    field_name="dense_embedding",
+    vector=[0.1, 0.2, 0.3, ...],  # 768 dimensions
+    param=HnswQueryParam(ef=300)
+)
+
+# Sparse keyword search
+sparse_query = VectorQuery(
+    field_name="sparse_embedding",
+    vector={15: 0.8, 42: 1.2, 103: 0.5}  # sparse format
+)
+
+# Combine results with weighted fusion
+results = collection.hybrid_search(
+    dense_query,
+    sparse_query,
+    dense_weight=0.7,
+    sparse_weight=0.3
+)
+```
+
+## See Also
+
+- [HnswIndexParam](/api/index/hnsw) - For dense vector search
+- [IVFIndexParam](/api/index/ivf) - For large-scale dense vectors
+- [VectorQuery](/api/query/vector-query) - Querying with inverted indexes

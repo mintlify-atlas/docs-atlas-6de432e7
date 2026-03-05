@@ -1,0 +1,465 @@
+---
+title: "Contributing"
+description: "How to contribute to Zvec"
+icon: "code-pull-request"
+---
+
+## Welcome Contributors!
+
+Thank you for considering contributing to Zvec! Whether you're fixing a bug, adding a feature, improving documentation, or helping others, your contribution helps make Zvec better for everyone.
+
+<Note>
+  By participating, you agree to abide by our [Code of Conduct](https://github.com/alibaba/zvec/blob/main/CODE_OF_CONDUCT.md). Please be respectful, collaborative, and inclusive.
+</Note>
+
+## Ways to Contribute
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Found an issue? Report it on [GitHub Issues](https://github.com/alibaba/zvec/issues)
+  </Card>
+  <Card title="Suggest Features" icon="lightbulb">
+    Have an idea? Share it in [Discussions](https://github.com/alibaba/zvec/discussions)
+  </Card>
+  <Card title="Fix Bugs" icon="code">
+    Browse [open issues](https://github.com/alibaba/zvec/issues) labeled `good first issue`
+  </Card>
+  <Card title="Improve Docs" icon="book">
+    Documentation improvements are always welcome!
+  </Card>
+</CardGroup>
+
+---
+
+## Development Setup
+
+Follow these steps to set up your development environment.
+
+### Prerequisites
+
+Ensure you have:
+
+- **Python** 3.10 - 3.12
+- **CMake** ≥ 3.26, < 4.0
+- **C++17-compatible compiler**:
+  - Linux: `g++-11` or later
+  - macOS: Xcode Command Line Tools (Apple Clang)
+
+Verify versions:
+
+```bash
+python --version
+cmake --version
+g++ --version  # or clang++ --version on macOS
+```
+
+### Clone the Repository
+
+Clone with submodules:
+
+```bash
+git clone --recursive https://github.com/alibaba/zvec.git
+cd zvec
+```
+
+<Tip>
+  If you forgot `--recursive`, initialize submodules:
+  ```bash
+  git submodule update --init --recursive
+  ```
+</Tip>
+
+### Install Pre-commit Hooks
+
+Set up pre-commit hooks to automatically check code quality:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This ensures your commits meet coding standards before pushing.
+
+### Build and Install (Editable Mode)
+
+Install Zvec in editable mode with development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+This command:
+- Installs Zvec in development mode
+- Compiles the C++ extension in-place
+- Installs dev dependencies (pytest, ruff, etc.)
+
+### Verify Installation
+
+```bash
+python -c "import zvec; print('Success!')"
+```
+
+If successful, you're ready to develop!
+
+---
+
+## Testing
+
+### Run All Tests
+
+Run the full test suite:
+
+```bash
+pytest python/tests/ -v
+```
+
+### Run Specific Tests
+
+```bash
+# Test a specific file
+pytest python/tests/test_collection.py -v
+
+# Test a specific function
+pytest python/tests/test_collection.py::test_insert -v
+```
+
+### Run with Coverage
+
+Generate a coverage report:
+
+```bash
+pytest python/tests/ --cov=zvec --cov-report=term-missing
+```
+
+<Note>
+  Aim for at least 80% code coverage when adding new features.
+</Note>
+
+### C++ Tests
+
+If you're working on C++ code, build and run C++ tests:
+
+```bash
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make
+ctest --verbose
+```
+
+---
+
+## Code Style and Linting
+
+### Python Code Style
+
+Zvec uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
+
+**Check for issues**:
+
+```bash
+ruff check python/
+```
+
+**Auto-fix issues**:
+
+```bash
+ruff check --fix python/
+```
+
+**Format code**:
+
+```bash
+ruff format python/
+```
+
+### C++ Code Style
+
+For C++ contributions:
+- Follow existing code style in the repository
+- Use meaningful variable and function names
+- Add comments for complex logic
+- Keep functions focused and modular
+
+<Tip>
+  Pre-commit hooks will automatically check Python style before commits.
+</Tip>
+
+---
+
+## Build Customization
+
+Control the build process with environment variables:
+
+| Option | How to Set | Description |
+|--------|------------|-------------|
+| **Build Type** | `CMAKE_BUILD_TYPE=Debug` | `Debug`, `Release`, or `Coverage` |
+| **Generator** | `CMAKE_GENERATOR="Unix Makefiles"` | Default: `Ninja`; use `Make` if preferred |
+| **AVX-512** | `ENABLE_SKYLAKE_AVX512=ON` | Enable AVX-512 optimizations (x86_64 only) |
+
+**Example**: Debug build with Make:
+
+```bash
+CMAKE_BUILD_TYPE=Debug CMAKE_GENERATOR="Unix Makefiles" pip install -v -e .
+```
+
+### Coverage Build
+
+For C++ code coverage with gcov/lcov:
+
+```bash
+CMAKE_BUILD_TYPE=Coverage pip install -v -e .
+# Run tests
+pytest python/tests/
+# Generate coverage report
+lcov --capture --directory build --output-file coverage.info
+genhtml coverage.info --output-directory coverage_html
+```
+
+---
+
+## Submitting Changes
+
+Follow these steps to submit your contribution:
+
+### 1. Create a Feature Branch
+
+Branch from `main` using a descriptive name:
+
+```bash
+git checkout -b feat/add-sparse-vector-support
+# or
+git checkout -b fix/query-dimension-mismatch
+# or
+git checkout -b docs/improve-quickstart
+```
+
+**Branch naming conventions**:
+- `feat/` - New features
+- `fix/` - Bug fixes
+- `docs/` - Documentation changes
+- `refactor/` - Code refactoring
+- `test/` - Test additions/improvements
+
+### 2. Make Your Changes
+
+- Write clear, focused code
+- Add tests for new functionality
+- Update documentation as needed
+- Follow existing code style
+
+### 3. Write Clear Commit Messages
+
+Use descriptive commit messages:
+
+```bash
+git commit -m "feat(query): add support for sparse vector queries"
+git commit -m "fix(insert): handle null vectors in VECTOR_FP32"
+git commit -m "docs(quickstart): clarify installation steps"
+```
+
+**Format**: `type(scope): description`
+
+**Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+
+### 4. Run Tests and Linters
+
+Before pushing:
+
+```bash
+# Run tests
+pytest python/tests/ -v
+
+# Check linting
+ruff check python/
+
+# Format code
+ruff format python/
+```
+
+### 5. Push Your Branch
+
+```bash
+git push origin feat/add-sparse-vector-support
+```
+
+### 6. Open a Pull Request
+
+Go to [GitHub](https://github.com/alibaba/zvec) and open a Pull Request:
+
+1. Click **"Compare & pull request"**
+2. Write a descriptive title and description
+3. Link related issues (e.g., "Closes #123")
+4. Request review from maintainers
+
+**PR checklist**:
+- [ ] Tests pass locally
+- [ ] Code follows style guidelines
+- [ ] Documentation updated (if needed)
+- [ ] Commit messages are clear
+- [ ] PR description explains changes
+
+<Warning>
+  Ensure all tests pass and code is properly formatted before submitting your PR.
+</Warning>
+
+---
+
+## Pull Request Guidelines
+
+### What to Include
+
+Your PR should include:
+
+✅ **Test coverage** for new behavior  
+✅ **Documentation updates** (if adding features)  
+✅ **Clear reasoning** for non-obvious design choices  
+✅ **Reference to related issues**  
+
+### PR Review Process
+
+1. **Automated checks** run (CI, linting, tests)
+2. **Maintainers review** your code
+3. **Feedback and iteration** - address review comments
+4. **Approval** - maintainer approves PR
+5. **Merge** - your contribution is merged!
+
+<Tip>
+  Be patient during review. Maintainers may take time to respond, especially for large changes.
+</Tip>
+
+---
+
+## Documentation
+
+### User Guides
+
+Documentation is built with Mintlify:
+
+```bash
+# Install Mintlify CLI
+npm i -g mint
+
+# Preview docs locally
+cd docs
+mint dev
+
+# Open http://localhost:3000
+```
+
+Documentation source:
+- Location: `docs/` directory
+- Format: MDX (Markdown + JSX)
+- Configuration: `docs.json`
+
+### API Reference
+
+API docs are generated from docstrings. Follow [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings):
+
+```python
+def query(self, vector: List[float], topk: int = 10) -> List[Dict]:
+    """Query the collection for similar vectors.
+    
+    Args:
+        vector: Query vector as a list of floats.
+        topk: Number of results to return (default: 10).
+    
+    Returns:
+        List of dicts with keys 'id' and 'score'.
+    
+    Raises:
+        ValueError: If vector dimension doesn't match schema.
+    
+    Example:
+        >>> results = collection.query([0.1, 0.2, 0.3], topk=5)
+        >>> print(results[0]['id'])
+        'doc_123'
+    """
+    pass
+```
+
+---
+
+## Community Guidelines
+
+### Getting Help
+
+If you need help while contributing:
+
+- **[GitHub Discussions](https://github.com/alibaba/zvec/discussions)** - Ask questions
+- **[Discord](https://discord.gg/rKddFBBu9z)** - Real-time chat
+- **[Existing Issues](https://github.com/alibaba/zvec/issues)** - Browse for similar problems
+
+### Reporting Security Issues
+
+For security vulnerabilities, **do not** open a public issue. Instead:
+
+- Email: `zvec@alibaba-inc.com`
+- Provide detailed description and steps to reproduce
+- Allow time for maintainers to respond
+
+### Recognition
+
+Contributors are recognized:
+
+- Listed in GitHub contributors
+- Mentioned in release notes (for significant contributions)
+- Eligible for Zvec swag (for major contributions)
+
+---
+
+## Good First Issues
+
+New to Zvec? Look for issues labeled:
+
+- [`good first issue`](https://github.com/alibaba/zvec/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) - Beginner-friendly
+- [`help wanted`](https://github.com/alibaba/zvec/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) - Community contributions welcome
+- [`documentation`](https://github.com/alibaba/zvec/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation) - Docs improvements
+
+These are great starting points for your first contribution!
+
+---
+
+## Code Review Best Practices
+
+### For Contributors
+
+- Keep PRs **focused and small** (easier to review)
+- Respond to feedback **promptly and respectfully**
+- Ask questions if feedback is unclear
+- Mark conversations as **resolved** after addressing
+
+### For Reviewers
+
+- Be **constructive and respectful** in feedback
+- Focus on **code quality**, not personal preferences
+- Explain **why** changes are suggested
+- Approve when satisfied with changes
+
+---
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/alibaba/zvec">
+    Browse source code and issues
+  </Card>
+  <Card title="Contributing Guide" icon="file" href="https://github.com/alibaba/zvec/blob/main/CONTRIBUTING.md">
+    Full contributing guide on GitHub
+  </Card>
+  <Card title="Code of Conduct" icon="handshake" href="https://github.com/alibaba/zvec/blob/main/CODE_OF_CONDUCT.md">
+    Community guidelines
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/rKddFBBu9z">
+    Join the conversation
+  </Card>
+</CardGroup>
+
+---
+
+## Thank You!
+
+Your contributions make Zvec better for everyone. Whether it's a bug fix, a new feature, or improved documentation, we appreciate your effort and time.
+
+<Note>
+  ✨ **Thanks again for being part of Zvec!** ✨
+</Note>

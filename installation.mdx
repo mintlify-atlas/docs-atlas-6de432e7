@@ -1,0 +1,225 @@
+---
+title: Installation
+description: Install Zvec for Python or Node.js on supported platforms
+---
+
+Zvec is distributed as pre-built binary packages for Python and Node.js. Installation is straightforward and requires no compilation.
+
+## Prerequisites
+
+### Python Requirements
+
+- **Python version**: 3.10, 3.11, or 3.12
+- **Dependencies**: NumPy >= 1.23 (automatically installed)
+
+### Supported Platforms
+
+Zvec provides pre-built binaries for the following platforms:
+
+- **Linux**: x86_64 (AMD64) and ARM64 (aarch64)
+- **macOS**: ARM64 (Apple Silicon)
+
+<Note>
+Windows support is not currently available. For unsupported platforms, see [Building from Source](https://zvec.org/en/docs/build/).
+</Note>
+
+## Installation
+
+<Steps>
+  <Step title="Choose your language">
+    Zvec supports both Python and Node.js. Select your preferred language below.
+  </Step>
+
+  <Step title="Install the package">
+    <CodeGroup>
+      ```bash Python (pip)
+      pip install zvec
+      ```
+
+      ```bash Node.js (npm)
+      npm install @zvec/zvec
+      ```
+
+      ```bash Node.js (yarn)
+      yarn add @zvec/zvec
+      ```
+
+      ```bash Node.js (pnpm)
+      pnpm add @zvec/zvec
+      ```
+    </CodeGroup>
+
+    The installation typically completes in seconds since pre-built binaries are used.
+  </Step>
+
+  <Step title="Verify installation">
+    Confirm that Zvec is installed correctly:
+
+    <CodeGroup>
+      ```python Python
+      import zvec
+      print(f"Zvec version: {zvec.__version__}")
+      ```
+
+      ```javascript Node.js
+      const zvec = require('@zvec/zvec');
+      console.log('Zvec installed successfully');
+      ```
+    </CodeGroup>
+
+    If you see the version number (Python) or success message (Node.js), you're ready to go!
+  </Step>
+</Steps>
+
+## Platform-Specific Notes
+
+### Linux
+
+Zvec binaries are built for **manylinux_2_28**, which is compatible with:
+
+- Ubuntu 22.04+ / Debian 11+
+- RHEL 9+ / CentOS Stream 9+ / Rocky Linux 9+
+- Amazon Linux 2023+
+- Other distributions with glibc 2.28+
+
+<Tip>
+For older distributions (glibc < 2.28), you'll need to [build from source](https://zvec.org/en/docs/build/).
+</Tip>
+
+### macOS
+
+Zvec supports **macOS 11.0 (Big Sur) and later** on Apple Silicon (ARM64).
+
+<Warning>
+Intel-based Macs (x86_64) are not currently supported with pre-built binaries. Please [build from source](https://zvec.org/en/docs/build/) or use Rosetta 2 emulation (may have performance impact).
+</Warning>
+
+## Troubleshooting
+
+### Python Version Mismatch
+
+**Problem**: `pip install zvec` fails with "No matching distribution found"
+
+**Solution**: Verify your Python version is between 3.10 and 3.12:
+
+```bash
+python --version
+```
+
+If you have multiple Python versions, use the specific version:
+
+```bash
+python3.11 -m pip install zvec
+```
+
+### Platform Not Supported
+
+**Problem**: Installation fails with "unsupported platform" or similar error
+
+**Solution**: Check your platform:
+
+```bash
+# Linux
+uname -m  # Should output: x86_64 or aarch64
+
+# macOS
+uname -m  # Should output: arm64
+```
+
+If your platform is not supported, see [Building from Source](https://zvec.org/en/docs/build/).
+
+### Import Error on Linux
+
+**Problem**: `ImportError: libstdc++.so.6: version 'GLIBCXX_X.X.XX' not found`
+
+**Solution**: Your system's C++ standard library is outdated. Options:
+
+1. **Update your system** (recommended):
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update && sudo apt upgrade
+
+   # RHEL/CentOS/Rocky
+   sudo dnf update
+   ```
+
+2. **Build from source** on your specific system
+
+### NumPy Compatibility Issues
+
+**Problem**: Version conflicts with NumPy
+
+**Solution**: Zvec requires NumPy >= 1.23. Update NumPy:
+
+```bash
+pip install --upgrade numpy
+```
+
+If you have strict NumPy version requirements, ensure they're compatible with >= 1.23.
+
+## Virtual Environments
+
+We recommend using virtual environments to avoid dependency conflicts:
+
+<CodeGroup>
+  ```bash venv
+  # Create virtual environment
+  python -m venv zvec-env
+
+  # Activate (Linux/macOS)
+  source zvec-env/bin/activate
+
+  # Activate (Windows)
+  zvec-env\Scripts\activate
+
+  # Install Zvec
+  pip install zvec
+  ```
+
+  ```bash conda
+  # Create conda environment
+  conda create -n zvec-env python=3.11
+
+  # Activate
+  conda activate zvec-env
+
+  # Install Zvec
+  pip install zvec
+  ```
+</CodeGroup>
+
+## Optional Dependencies
+
+### For Machine Learning Integration
+
+If you plan to use Zvec with machine learning frameworks, you may want to install:
+
+```bash
+# PyTorch (for model inference)
+pip install torch
+
+# Transformers (for Hugging Face models)
+pip install transformers sentence-transformers
+
+# OpenAI (for embeddings via API)
+pip install openai
+```
+
+<Note>
+These dependencies are optional. Zvec works with any embedding source, including pre-computed vectors.
+</Note>
+
+## Building from Source
+
+For platforms without pre-built binaries or if you need custom build options, see the [Building from Source](https://zvec.org/en/docs/build/) guide.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first vector search application
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/collections">
+    Learn about schemas, collections, and indexing
+  </Card>
+</CardGroup>

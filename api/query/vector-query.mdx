@@ -1,0 +1,115 @@
+---
+title: 'VectorQuery'
+description: 'Represents a vector search query for a specific field in a collection'
+---
+
+## Overview
+
+The `VectorQuery` class represents a vector search query for a specific field in a collection. It can be constructed using either a document ID to look up its vector, or an explicit query vector. You can optionally include index-specific query parameters to control search behavior.
+
+## Constructor
+
+```python
+VectorQuery(
+    field_name: str,
+    id: Optional[str] = None,
+    vector: VectorType = None,
+    param: Optional[Union[HnswQueryParam, IVFQueryParam]] = None
+)
+```
+
+## Parameters
+
+<ParamField path="field_name" type="str" required>
+  Name of the vector field to query.
+</ParamField>
+
+<ParamField path="id" type="str" default="None">
+  Document ID to fetch vector from. Exactly one of `id` or `vector` should be provided.
+</ParamField>
+
+<ParamField path="vector" type="VectorType" default="None">
+  Explicit query vector (list of floats). Exactly one of `id` or `vector` should be provided.
+</ParamField>
+
+<ParamField path="param" type="Union[HnswQueryParam, IVFQueryParam]" default="None">
+  Index-specific query parameters to control search behavior. Use [HnswQueryParam](/api/query/hnsw-params) for HNSW indexes or [IVFQueryParam](/api/query/ivf-params) for IVF indexes.
+</ParamField>
+
+## Methods
+
+### has_id()
+
+Check if the query is based on a document ID.
+
+**Returns:** `bool` - True if `id` is set, False otherwise.
+
+### has_vector()
+
+Check if the query contains an explicit vector.
+
+**Returns:** `bool` - True if `vector` is non-empty, False otherwise.
+
+## Examples
+
+### Query by document ID
+
+```python
+import zvec
+
+# Query using a document ID
+query = zvec.VectorQuery(
+    field_name="embedding",
+    id="doc123"
+)
+```
+
+### Query by explicit vector
+
+```python
+import zvec
+
+# Query using an explicit vector
+query = zvec.VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3, 0.4, 0.5]
+)
+```
+
+### Query with HNSW parameters
+
+```python
+import zvec
+from zvec import HnswQueryParam
+
+# Query with HNSW-specific parameters
+query = zvec.VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=HnswQueryParam(ef=300)
+)
+```
+
+### Query with IVF parameters
+
+```python
+import zvec
+from zvec import IVFQueryParam
+
+# Query with IVF-specific parameters
+query = zvec.VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=IVFQueryParam(nprobe=20)
+)
+```
+
+## Notes
+
+<Warning>
+  Exactly one of `id` or `vector` should be provided. If both are given, behavior is implementation-defined (typically `id` takes precedence).
+</Warning>
+
+<Info>
+  The `param` field allows you to fine-tune search behavior based on your index type. Different index types support different query parameters.
+</Info>

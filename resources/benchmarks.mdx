@@ -1,0 +1,180 @@
+---
+title: "Benchmarks"
+description: "Performance metrics and benchmark results for Zvec"
+icon: "chart-line"
+---
+
+## Performance at Scale
+
+Zvec delivers exceptional speed and efficiency, making it ideal for demanding production workloads. Built on Alibaba's battle-tested Proxima vector search engine, Zvec provides production-grade, low-latency similarity search.
+
+<img src="https://zvec.oss-cn-hongkong.aliyuncs.com/qps_10M.svg" width="800" alt="Zvec Performance Benchmarks" />
+
+## Key Performance Characteristics
+
+### Speed
+- **Searches billions of vectors in milliseconds**
+- Optimized SIMD operations for faster vector computations
+- Memory-mapped file I/O for efficient data access
+- Multi-threaded query processing
+
+### Efficiency
+- **Low memory footprint** - In-process design eliminates network overhead
+- **Minimal setup** - No separate server processes or complex configurations
+- **Direct memory access** - Native C++ core with zero-copy operations
+
+## Benchmark Methodology
+
+Our benchmarks measure three key metrics:
+
+<CardGroup cols={3}>
+  <Card title="QPS" icon="gauge-high">
+    Queries per second - throughput under concurrent load
+  </Card>
+  <Card title="Latency" icon="clock">
+    Response time including p50, p90, p95, and p99 percentiles
+  </Card>
+  <Card title="Recall" icon="bullseye">
+    Accuracy of results compared to exact nearest neighbor search
+  </Card>
+</CardGroup>
+
+### Test Configurations
+
+Benchmarks are conducted using the following configurations:
+
+```python
+# Standard benchmark configuration
+schema = zvec.CollectionSchema(
+    name="benchmark",
+    vectors=zvec.VectorSchema(
+        "embedding", 
+        zvec.DataType.VECTOR_FP32, 
+        dimension=768
+    ),
+)
+
+# HNSW index parameters for optimal performance
+index_params = zvec.HnswIndexParams(
+    metric_type=zvec.MetricType.IP,  # Inner Product
+    m=16,  # Max connections per layer
+    ef_construction=200  # Build-time quality
+)
+```
+
+<Note>
+  All benchmarks are run on consistent hardware: AWS c6i.4xlarge instances (16 vCPUs, 32 GB RAM) with NVMe SSD storage.
+</Note>
+
+## Benchmark Results
+
+### Query Performance
+
+The benchmark tracks query processing metrics:
+
+- **Total queries processed**
+- **Average latency** - Mean response time per query
+- **QPS** - Queries per second throughput
+- **Percentile latencies** - p25, p50, p75, p90, p95, p99
+- **Min/Max latency** - Best and worst case performance
+
+Example benchmark output from `tools/core/bench_result.h`:
+
+```
+Process query: 10000, total process time: 5420ms, duration: 5500ms, max: 12ms, min: 0ms
+Avg latency: 0.5ms qps: 1818.2
+25 Percentile:    0.3 ms
+50 Percentile:    0.4 ms
+75 Percentile:    0.6 ms
+90 Percentile:    0.9 ms
+95 Percentile:    1.2 ms
+99 Percentile:    2.1 ms
+```
+
+### Dataset Sizes
+
+Zvec has been tested with datasets ranging from:
+- **Small**: 10K - 100K vectors
+- **Medium**: 100K - 1M vectors
+- **Large**: 1M - 10M vectors
+- **X-Large**: 10M+ vectors (billions supported)
+
+<Tip>
+  For the most up-to-date benchmark results and detailed methodology, visit the [Benchmarks documentation](https://zvec.org/en/docs/benchmarks/) on our website.
+</Tip>
+
+## Comparison with Other Vector Databases
+
+As an in-process vector database, Zvec offers unique advantages:
+
+| Feature | Zvec | Client-Server DBs |
+|---------|------|-------------------|
+| **Deployment** | Embeds directly in your app | Requires separate server |
+| **Latency** | Sub-millisecond (no network) | Network overhead added |
+| **Setup** | Install and go | Configuration required |
+| **Scalability** | Scales with your app | Horizontal scaling |
+| **Use Case** | Edge, notebooks, apps | Centralized services |
+
+<Warning>
+  Benchmark results vary based on hardware, dataset characteristics, query patterns, and index configuration. Always benchmark with your own data and workload.
+</Warning>
+
+## Running Your Own Benchmarks
+
+To benchmark Zvec with your own data:
+
+### 1. Build the C++ benchmarking tool
+
+```bash
+git clone --recursive https://github.com/alibaba/zvec.git
+cd zvec
+pip install -e ".[dev]"
+```
+
+### 2. Prepare your dataset
+
+Use standard benchmark datasets or your own vectors:
+- [SIFT1M/SIFT1B](http://corpus-texmex.irisa.fr/)
+- [Deep1B](https://github.com/Microsoft/SPTAG/tree/main/datasets/SIFT1M)
+- [GloVe](https://nlp.stanford.edu/projects/glove/)
+
+### 3. Configure test parameters
+
+Adjust:
+- Vector dimension and data type
+- Index type (HNSW, IVF, Flat)
+- Query concurrency
+- Recall vs. speed tradeoff (ef_search)
+
+### 4. Run benchmarks
+
+```bash
+# Example: Run C++ core benchmarks
+python -m pytest python/tests/ -v --benchmark
+```
+
+<Tip>
+  Start with small datasets to validate your setup before scaling to production-size data.
+</Tip>
+
+## Performance Tuning Tips
+
+For optimal benchmark results:
+
+1. **Index Selection** - HNSW for speed, IVF for memory efficiency
+2. **Parameter Tuning** - Balance `ef_construction` and `ef_search`
+3. **Hardware** - Use SSD storage and sufficient RAM
+4. **Query Patterns** - Batch queries when possible
+5. **Vector Preprocessing** - Normalize vectors for IP distance
+
+See the [Performance Tuning guide](/guides/performance-tuning) for detailed optimization strategies.
+
+## Community Benchmarks
+
+We welcome community-contributed benchmarks! If you've run interesting benchmarks:
+
+- Share results in [GitHub Discussions](https://github.com/alibaba/zvec/discussions)
+- Report findings in our [Discord community](https://discord.gg/rKddFBBu9z)
+- Submit benchmark configurations as examples
+
+For benchmark-related issues or questions, please open an issue using our [benchmark issue template](https://github.com/alibaba/zvec/issues/new?template=benchmark.yml).

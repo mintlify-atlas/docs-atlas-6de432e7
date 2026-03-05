@@ -1,0 +1,700 @@
+---
+title: Querying
+description: Execute vector similarity searches with filters, reranking, and multi-vector queries
+---
+
+Querying is how you perform **vector similarity search** in Zvec. Given a query vector, Zvec finds the most similar documents in your collection based on vector distance metrics like cosine similarity or Euclidean distance.
+
+## VectorQuery Basics
+
+The `VectorQuery` class defines a single vector search query:
+
+```python
+from zvec import VectorQuery
+
+# Query with explicit vector
+query = VectorQuery(
+    field_name="embedding",    # Vector field to search
+    vector=[0.1, 0.2, 0.3, ...] # Query vector
+)
+
+# Query by document ID (use existing document's vector)
+query = VectorQuery(
+    field_name="embedding",
+    id="doc123"                 # Use doc123's vector as query
+)
+```
+
+### VectorQuery Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `field_name` | `str` | Name of the vector field to search (required) |
+| `vector` | `list`, `np.ndarray`, or `dict` | Query vector (dense or sparse) |
+| `id` | `str` | Document ID to use as query vector |
+| `param` | `HnswQueryParam` or `IVFQueryParam` | Index-specific query parameters |
+
+<Note>
+  Provide **either** `vector` or `id`, not both. If both are provided, `id` takes precedence.
+</Note>
+
+## Basic Query Execution
+
+### Simple Vector Search
+
+```python
+import zvec
+from zvec import VectorQuery
+
+# Open collection
+collection = zvec.open("./data/my_collection")
+
+# Perform vector search
+query_vector = [0.1, 0.2, 0.3, ...]  # 768-dim vector
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector
+    ),
+    topk=10  # Return top 10 most similar documents
+)
+
+# Process results
+for doc in results:
+    print(f"ID: {doc.id}")
+    print(f"Score: {doc.score}")  # Similarity score
+    print(f"Title: {doc.field('title')}")
+    print("---")
+```
+
+### Query by Document ID
+
+Find documents similar to an existing document:
+
+```python
+# Find documents similar to doc123
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        id="doc123"  # Use doc123's vector as query
+    ),
+    topk=10
+)
+
+# Results will include similar documents (excluding doc123 itself)
+for doc in results:
+    print(f"Similar to doc123: {doc.id} (score: {doc.score})")
+```
+
+## Query Parameters
+
+The `collection.query()` method accepts several parameters:
+
+### Core Parameters
+
+```python
+results = collection.query(
+    vectors=VectorQuery(...),        # Required: vector query
+    topk=10,                         # Number of results to return
+    filter=None,                     # Optional: filter expression
+    include_vector=False,            # Whether to include vectors in results
+    output_fields=None,              # Specific fields to return
+    reranker=None                    # Optional: reranking function
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `vectors` | `VectorQuery` or `list[VectorQuery]` | - | One or more vector queries (required) |
+| `topk` | `int` | `10` | Number of results to return |
+| `filter` | `str` | `None` | Boolean filter expression |
+| `include_vector` | `bool` | `False` | Include vector data in results |
+| `output_fields` | `list[str]` | `None` | Specific fields to return (None = all fields) |
+| `reranker` | `ReRanker` | `None` | Reranker to refine results |
+
+### Controlling Result Count
+
+```python
+# Get top 5 results
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=5
+)
+
+# Get top 100 results
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=100
+)
+```
+
+### Including Vectors in Results
+
+By default, vector data is excluded from results to save bandwidth:
+
+```python
+# Exclude vectors (default, faster)
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    include_vector=False
+)
+print(results[0].vector("embedding"))  # None
+
+# Include vectors in results
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    include_vector=True
+)
+print(results[0].vector("embedding"))  # [0.1, 0.2, 0.3, ...]
+```
+
+### Selecting Output Fields
+
+Control which scalar fields are returned:
+
+```python
+# Return all fields (default)
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    output_fields=None  # All fields included
+)
+
+# Return specific fields only (more efficient)
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    output_fields=["title", "category", "price"]
+)
+
+# Access returned fields
+for doc in results:
+    print(doc.field("title"))     # Available
+    print(doc.field("category"))  # Available
+    print(doc.field("author"))    # None (not requested)
+```
+
+## Filtering
+
+Filter expressions allow you to pre-filter candidates before vector search:
+
+### Basic Filter Expressions
+
+```python
+# Equality
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="category == 'electronics'"
+)
+
+# Inequality
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="price > 100.0"
+)
+
+# String matching
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="status == 'active'"
+)
+```
+
+### Complex Filter Expressions
+
+Combine conditions with logical operators:
+
+```python
+# AND operator
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="category == 'electronics' && price < 500.0"
+)
+
+# OR operator
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="category == 'electronics' || category == 'computers'"
+)
+
+# NOT operator
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="!(status == 'deleted')"
+)
+
+# Parentheses for grouping
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="(category == 'electronics' || category == 'computers') && price < 1000.0"
+)
+```
+
+### Range Queries
+
+```python
+# Greater than
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="price > 50.0"
+)
+
+# Less than or equal
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="rating <= 4.5"
+)
+
+# Between (using AND)
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="price >= 100.0 && price <= 500.0"
+)
+```
+
+### Filter Performance
+
+<Warning>
+  Filters are applied **before** vector search. Without inverted indexes, filtering requires scanning all documents. Create inverted indexes on frequently filtered fields for better performance.
+</Warning>
+
+```python
+from zvec import InvertIndexParam
+
+# Create inverted index on filtered field
+collection.create_index(
+    field_name="category",
+    index_param=InvertIndexParam()
+)
+
+# Now filtering by category is fast
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10,
+    filter="category == 'electronics'"  # Uses index, very fast
+)
+```
+
+## Multi-Vector Queries
+
+Zvec supports querying multiple vector fields simultaneously for **hybrid search**:
+
+```python
+from zvec import VectorQuery
+
+# Query both text and image embeddings
+text_vector = [0.1, 0.2, 0.3, ...]    # 768-dim text embedding
+image_vector = [0.5, 0.6, 0.7, ...]   # 512-dim image embedding
+
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_embedding", vector=text_vector),
+        VectorQuery(field_name="image_embedding", vector=image_vector)
+    ],
+    topk=10
+)
+
+# Results are ranked by combined similarity across all vectors
+for doc in results:
+    print(f"ID: {doc.id}, Combined score: {doc.score}")
+```
+
+### Hybrid Dense + Sparse Search
+
+Combine dense semantic search with sparse keyword search:
+
+```python
+from zvec import VectorQuery
+
+# Dense semantic vector (from transformer)
+dense_vector = [0.1, 0.2, 0.3, ...]  # 768-dim
+
+# Sparse keyword vector (from BM25)
+sparse_vector = {
+    10: 0.891,   # "python" keyword
+    42: 1.234,   # "machine" keyword
+    156: 0.678   # "learning" keyword
+}
+
+# Hybrid search
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_embedding", vector=dense_vector),
+        VectorQuery(field_name="keyword_embedding", vector=sparse_vector)
+    ],
+    topk=10
+)
+```
+
+## Index-Specific Query Parameters
+
+### HNSW Query Parameters
+
+Adjust the `ef` parameter at query time for recall/speed tradeoff:
+
+```python
+from zvec import VectorQuery, HnswQueryParam
+
+# Lower ef: faster search, lower recall (~90%)
+fast_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=50)
+    ),
+    topk=10
+)
+
+# Default ef: balanced (recall ~95%)
+balanced_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=100)
+    ),
+    topk=10
+)
+
+# Higher ef: slower search, higher recall (~99%)
+accurate_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=300)
+    ),
+    topk=10
+)
+```
+
+### IVF Query Parameters
+
+Adjust the `nprobe` parameter at query time:
+
+```python
+from zvec import VectorQuery, IVFQueryParam
+
+# Lower nprobe: faster search, lower recall
+fast_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=IVFQueryParam(nprobe=5)
+    ),
+    topk=10
+)
+
+# Higher nprobe: slower search, higher recall
+accurate_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=IVFQueryParam(nprobe=50)
+    ),
+    topk=10
+)
+```
+
+## Query Results
+
+Query results are returned as a list of `Doc` objects:
+
+```python
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=10
+)
+
+# Results are sorted by score (highest first)
+for i, doc in enumerate(results):
+    print(f"Rank {i+1}:")
+    print(f"  ID: {doc.id}")
+    print(f"  Score: {doc.score}")  # Similarity score (higher = more similar)
+    
+    # Access scalar fields
+    print(f"  Title: {doc.field('title')}")
+    print(f"  Category: {doc.field('category')}")
+    
+    # Access vectors (if include_vector=True)
+    if doc.has_vector("embedding"):
+        vector = doc.vector("embedding")
+        print(f"  Vector: {vector[:5]}...")  # Print first 5 dims
+    
+    print("---")
+```
+
+### Understanding Scores
+
+Scores represent similarity between query and document vectors:
+
+- **Higher score = more similar**
+- Score range depends on the distance metric:
+  - **Cosine similarity**: [-1, 1] (typically [0, 1] for normalized vectors)
+  - **Euclidean distance**: [0, ∞) (lower = more similar, but Zvec inverts this)
+  - **Inner product**: (-∞, ∞)
+
+```python
+results = collection.query(
+    vectors=VectorQuery(field_name="embedding", vector=query_vector),
+    topk=5
+)
+
+for doc in results:
+    if doc.score > 0.9:
+        print(f"{doc.id}: Very similar (score: {doc.score:.3f})")
+    elif doc.score > 0.7:
+        print(f"{doc.id}: Similar (score: {doc.score:.3f})")
+    else:
+        print(f"{doc.id}: Somewhat similar (score: {doc.score:.3f})")
+```
+
+## Reranking
+
+Rerankers refine initial search results using more sophisticated models:
+
+```python
+from zvec import RrfReRanker, WeightedReRanker
+
+# Reciprocal Rank Fusion (RRF) for multi-vector queries
+reranker = RrfReRanker(k=60)
+
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_embedding", vector=text_vector),
+        VectorQuery(field_name="keyword_embedding", vector=sparse_vector)
+    ],
+    topk=10,
+    reranker=reranker
+)
+
+# Weighted reranker (custom weights per vector field)
+reranker = WeightedReRanker(weights=[0.7, 0.3])  # 70% text, 30% keywords
+
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_embedding", vector=text_vector),
+        VectorQuery(field_name="keyword_embedding", vector=sparse_vector)
+    ],
+    topk=10,
+    reranker=reranker
+)
+```
+
+## Complete Query Examples
+
+### Example 1: E-commerce Product Search
+
+```python
+import zvec
+from zvec import VectorQuery
+
+# Open collection
+products = zvec.open("./data/products")
+
+# Generate query embedding from user search text
+query_text = "wireless bluetooth headphones"
+query_vector = embedding_model.encode(query_text)  # Your embedding model
+
+# Search with filters
+results = products.query(
+    vectors=VectorQuery(
+        field_name="product_embedding",
+        vector=query_vector
+    ),
+    topk=20,
+    filter="category == 'electronics' && price >= 50.0 && price <= 200.0 && in_stock == true",
+    output_fields=["name", "price", "rating", "image_url"]
+)
+
+# Display results
+for doc in results:
+    print(f"Product: {doc.field('name')}")
+    print(f"Price: ${doc.field('price')}")
+    print(f"Rating: {doc.field('rating')}⭐")
+    print(f"Relevance: {doc.score:.3f}")
+    print("---")
+```
+
+### Example 2: Semantic Document Search
+
+```python
+import zvec
+from zvec import VectorQuery, HnswQueryParam
+
+# Open collection
+docs = zvec.open("./data/documents")
+
+# Generate query embedding
+query_text = "machine learning algorithms for image recognition"
+query_vector = embedding_model.encode(query_text)
+
+# Search with high recall
+results = docs.query(
+    vectors=VectorQuery(
+        field_name="text_embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=300)  # High recall
+    ),
+    topk=10,
+    filter="document_type == 'research_paper' && year >= 2020",
+    output_fields=["title", "authors", "abstract", "year"]
+)
+
+# Display results
+for i, doc in enumerate(results, 1):
+    print(f"{i}. {doc.field('title')}")
+    print(f"   Authors: {', '.join(doc.field('authors'))}")
+    print(f"   Year: {doc.field('year')}")
+    print(f"   Relevance: {doc.score:.3f}")
+    print(f"   Abstract: {doc.field('abstract')[:200]}...")
+    print()
+```
+
+### Example 3: Hybrid Search (Dense + Sparse)
+
+```python
+import zvec
+from zvec import VectorQuery, RrfReRanker
+
+# Open collection
+articles = zvec.open("./data/articles")
+
+# Generate embeddings
+query_text = "climate change impact on agriculture"
+dense_vector = dense_model.encode(query_text)      # Dense semantic embedding
+sparse_vector = sparse_model.encode(query_text)    # Sparse keyword embedding
+
+# Hybrid search with RRF reranking
+results = articles.query(
+    vectors=[
+        VectorQuery(field_name="dense_embedding", vector=dense_vector),
+        VectorQuery(field_name="sparse_embedding", vector=sparse_vector)
+    ],
+    topk=10,
+    reranker=RrfReRanker(k=60),
+    output_fields=["title", "summary", "publish_date"]
+)
+
+# Display results
+for doc in results:
+    print(f"Title: {doc.field('title')}")
+    print(f"Published: {doc.field('publish_date')}")
+    print(f"Summary: {doc.field('summary')}")
+    print(f"Score: {doc.score:.3f}")
+    print("---")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use filters to reduce search space">
+    Apply filters to narrow down candidates before vector search:
+    ```python
+    # Good: filter first, then vector search
+    results = collection.query(
+        vectors=VectorQuery(...),
+        topk=10,
+        filter="category == 'electronics' && in_stock == true"
+    )
+    
+    # Less efficient: retrieve all results, filter in application code
+    all_results = collection.query(vectors=VectorQuery(...), topk=1000)
+    filtered = [r for r in all_results if r.field('category') == 'electronics']
+    ```
+  </Accordion>
+
+  <Accordion title="Create inverted indexes on filtered fields">
+    For fast filtering, create inverted indexes:
+    ```python
+    from zvec import InvertIndexParam
+    
+    collection.create_index("category", InvertIndexParam())
+    collection.create_index("in_stock", InvertIndexParam())
+    ```
+  </Accordion>
+
+  <Accordion title="Request only needed fields">
+    Use `output_fields` to reduce data transfer:
+    ```python
+    # Good: request only needed fields
+    results = collection.query(
+        vectors=VectorQuery(...),
+        topk=10,
+        output_fields=["title", "price"]
+    )
+    
+    # Less efficient: return all fields
+    results = collection.query(
+        vectors=VectorQuery(...),
+        topk=10
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Tune index parameters for recall/speed tradeoff">
+    Adjust query-time parameters based on requirements:
+    ```python
+    # Real-time API (prioritize speed)
+    results = collection.query(
+        vectors=VectorQuery(
+            field_name="embedding",
+            vector=query_vector,
+            param=HnswQueryParam(ef=50)  # Fast, ~90% recall
+        ),
+        topk=10
+    )
+    
+    # Batch processing (prioritize recall)
+    results = collection.query(
+        vectors=VectorQuery(
+            field_name="embedding",
+            vector=query_vector,
+            param=HnswQueryParam(ef=300)  # Slower, ~99% recall
+        ),
+        topk=10
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Use hybrid search for better relevance">
+    Combine dense and sparse vectors:
+    ```python
+    results = collection.query(
+        vectors=[
+            VectorQuery(field_name="dense_embedding", vector=dense_vec),
+            VectorQuery(field_name="sparse_embedding", vector=sparse_vec)
+        ],
+        topk=10,
+        reranker=RrfReRanker()
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Indexing" icon="magnifying-glass" href="/concepts/indexing">
+    Optimize query performance with indexes
+  </Card>
+  <Card title="Vectors" icon="vector-square" href="/concepts/vectors">
+    Understand vector types and formats
+  </Card>
+  <Card title="Collections" icon="database" href="/concepts/collections">
+    Manage collections and data
+  </Card>
+  <Card title="Schemas" icon="table" href="/concepts/schemas">
+    Define collection schemas
+  </Card>
+</CardGroup>

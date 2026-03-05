@@ -1,0 +1,459 @@
+---
+title: IndexType
+description: Enumeration of vector index types in Zvec
+---
+
+## Overview
+
+`IndexType` defines the indexing algorithm used for efficient vector search. Different index types offer various trade-offs between search speed, accuracy, memory usage, and build time.
+
+```python
+import zvec
+
+print(zvec.IndexType.HNSW)
+# Output: IndexType.HNSW
+```
+
+## Available Index Types
+
+<ParamField path="UNDEFINED" type="IndexType">
+  **No index specified**. Uses default indexing behavior.
+  
+  **When to use**: Let Zvec choose the appropriate index automatically.
+  
+  ```python
+  # Index type not specified - uses default
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=768
+  )
+  ```
+</ParamField>
+
+<ParamField path="FLAT" type="IndexType">
+  **Flat index (brute-force search)**. Exhaustive search with 100% recall.
+  
+  **Characteristics**:
+  - Perfect recall (100%)
+  - Linear search time O(n)
+  - No index build time
+  - Minimal memory overhead
+  
+  **When to use**: 
+  - Small datasets (< 10K vectors)
+  - When perfect recall is required
+  - Baseline benchmarking
+  - Development and testing
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=512,
+      index_type=IndexType.FLAT
+  )
+  ```
+</ParamField>
+
+<ParamField path="HNSW" type="IndexType">
+  **Hierarchical Navigable Small World**. Graph-based approximate nearest neighbor index.
+  
+  **Characteristics**:
+  - Very fast search (logarithmic)
+  - High recall (> 95% typical)
+  - Higher memory usage
+  - Fast index build
+  - Good for general-purpose use
+  
+  **When to use**:
+  - Medium to large datasets (10K - 100M+ vectors)
+  - When fast queries are critical
+  - General-purpose vector search
+  - Most production deployments
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=768,
+      index_type=IndexType.HNSW
+  )
+  ```
+</ParamField>
+
+<ParamField path="IVF" type="IndexType">
+  **Inverted File Index**. Clustering-based approximate search.
+  
+  **Characteristics**:
+  - Fast search with tunable accuracy
+  - Lower memory than HNSW
+  - Longer index build time
+  - Good for very large datasets
+  
+  **When to use**:
+  - Very large datasets (100M+ vectors)
+  - Memory-constrained environments
+  - When recall can be traded for speed
+  - Batch processing scenarios
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=1536,
+      index_type=IndexType.IVF
+  )
+  ```
+</ParamField>
+
+<ParamField path="INVERT" type="IndexType">
+  **Inverted index**. Optimized for sparse vectors (e.g., BM25).
+  
+  **Characteristics**:
+  - Designed for sparse vectors
+  - Fast keyword-style search
+  - Memory-efficient for sparse data
+  - Supports hybrid search
+  
+  **When to use**:
+  - Sparse vector fields
+  - BM25 or TF-IDF embeddings
+  - Keyword search
+  - Hybrid dense-sparse search
+  
+  ```python
+  field = Field(
+      name="bm25_sparse",
+      dtype=DataType.SPARSE_VECTOR_FP32,
+      index_type=IndexType.INVERT  # For sparse vectors
+  )
+  ```
+</ParamField>
+
+## Index Properties
+
+All `IndexType` enum members have these properties:
+
+<ResponseField name="name" type="str">
+  The name of the index type as a string.
+  ```python
+  IndexType.HNSW.name  # "HNSW"
+  ```
+</ResponseField>
+
+<ResponseField name="value" type="int">
+  The internal integer value of the index type.
+  ```python
+  IndexType.HNSW.value  # 1
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Basic Index Definition
+
+```python
+from zvec import Collection, Field, DataType, IndexType, MetricType
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="title", dtype=DataType.STRING),
+    Field(
+        name="embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        metric=MetricType.COSINE,
+        index_type=IndexType.HNSW  # Graph-based ANN
+    )
+]
+
+collection = Collection.create(name="documents", schema=schema)
+```
+
+### Multi-Field with Different Index Types
+
+```python
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    
+    # Dense vector with HNSW
+    Field(
+        name="dense_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        metric=MetricType.COSINE,
+        index_type=IndexType.HNSW
+    ),
+    
+    # Sparse vector with inverted index
+    Field(
+        name="sparse_embedding",
+        dtype=DataType.SPARSE_VECTOR_FP32,
+        index_type=IndexType.INVERT
+    ),
+    
+    # Small auxiliary vector with flat index
+    Field(
+        name="thumbnail_vec",
+        dtype=DataType.VECTOR_FP32,
+        dim=64,
+        metric=MetricType.L2,
+        index_type=IndexType.FLAT
+    )
+]
+
+collection = Collection.create(name="hybrid_search", schema=schema)
+```
+
+## Index Comparison
+
+<Tabs>
+  <Tab title="Performance">
+    | Index Type | Build Time | Query Speed | Memory | Recall |
+    |------------|-----------|-------------|---------|--------|
+    | FLAT | Instant | Slow (linear) | Minimal | 100% |
+    | HNSW | Fast | Very fast | High | > 95% |
+    | IVF | Slow | Fast | Medium | 90-95% |
+    | INVERT | Fast | Fast | Low (sparse) | 100% |
+    
+    <Note>
+      Performance varies based on dataset size, dimensionality, and configuration.
+    </Note>
+  </Tab>
+  
+  <Tab title="Scalability">
+    | Index Type | Best For | Max Vectors | Bottleneck |
+    |------------|----------|-------------|------------|
+    | FLAT | < 10K | ~10K | Search time |
+    | HNSW | 10K - 100M+ | ~100M | Memory |
+    | IVF | 100M+ | Billions | Build time |
+    | INVERT | Any (sparse) | Billions | Data sparsity |
+    
+    <Tip>
+      For massive scale (billions of vectors), combine IVF with quantization.
+    </Tip>
+  </Tab>
+  
+  <Tab title="Trade-offs">
+    ### FLAT (Exact Search)
+    ✅ Perfect accuracy
+    ✅ No memory overhead
+    ✅ Simple and reliable
+    ❌ Slow for large datasets
+    ❌ Not scalable
+    
+    ### HNSW (Graph-based ANN)
+    ✅ Very fast queries
+    ✅ High recall
+    ✅ Fast index build
+    ❌ High memory usage
+    ❌ Not ideal for > 100M vectors
+    
+    ### IVF (Clustering-based)
+    ✅ Scalable to billions
+    ✅ Lower memory than HNSW
+    ✅ Tunable speed/accuracy
+    ❌ Slower index build
+    ❌ Lower recall than HNSW
+    
+    ### INVERT (Sparse)
+    ✅ Efficient for sparse vectors
+    ✅ Fast keyword-style search
+    ✅ Low memory for sparse data
+    ❌ Only for sparse vectors
+    ❌ Not suitable for dense vectors
+  </Tab>
+</Tabs>
+
+## Choosing the Right Index
+
+<Steps>
+  <Step title="Determine Your Dataset Size">
+    | Vectors | Recommended Index |
+    |---------|------------------|
+    | < 10K | FLAT |
+    | 10K - 10M | HNSW |
+    | 10M - 100M | HNSW or IVF |
+    | > 100M | IVF |
+    | Sparse | INVERT |
+  </Step>
+  
+  <Step title="Consider Your Requirements">
+    Choose based on priorities:
+    
+    **Speed priority**: HNSW > IVF > FLAT
+    
+    **Memory priority**: IVF > HNSW > FLAT
+    
+    **Accuracy priority**: FLAT > HNSW > IVF
+    
+    **Build time priority**: FLAT > HNSW > IVF
+  </Step>
+  
+  <Step title="Test with Your Data">
+    Benchmark different index types:
+    
+    ```python
+    import time
+    
+    for index_type in [IndexType.FLAT, IndexType.HNSW, IndexType.IVF]:
+        collection = create_test_collection(index_type)
+        
+        # Measure index build time
+        start = time.time()
+        collection.insert_many(test_vectors)
+        build_time = time.time() - start
+        
+        # Measure query time
+        start = time.time()
+        results = collection.query(query_vector, topn=10)
+        query_time = time.time() - start
+        
+        # Evaluate recall
+        recall = compute_recall(results, ground_truth)
+        
+        print(f"{index_type.name}:")
+        print(f"  Build: {build_time:.2f}s")
+        print(f"  Query: {query_time*1000:.2f}ms")
+        print(f"  Recall: {recall:.2%}")
+    ```
+  </Step>
+</Steps>
+
+## Index Configuration
+
+Each index type can be tuned with additional parameters:
+
+### HNSW Parameters
+
+```python
+from zvec.model.param import HNSWParam
+
+hnsw_param = HNSWParam(
+    m=16,              # Number of connections per node
+    ef_construction=200, # Construction-time search depth
+    ef_search=64       # Query-time search depth
+)
+
+field = Field(
+    name="embedding",
+    dtype=DataType.VECTOR_FP32,
+    dim=768,
+    index_type=IndexType.HNSW,
+    index_param=hnsw_param
+)
+```
+
+### IVF Parameters
+
+```python
+from zvec.model.param import IVFParam
+
+ivf_param = IVFParam(
+    nlist=1024,  # Number of clusters
+    nprobe=32    # Number of clusters to search
+)
+
+field = Field(
+    name="embedding",
+    dtype=DataType.VECTOR_FP32,
+    dim=1536,
+    index_type=IndexType.IVF,
+    index_param=ivf_param
+)
+```
+
+## Hybrid Search with Multiple Indexes
+
+```python
+from zvec import Collection, Field, DataType, IndexType, MetricType
+
+# Schema with dense and sparse vectors
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="content", dtype=DataType.STRING),
+    
+    # Dense semantic vector (HNSW)
+    Field(
+        name="dense_vec",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        metric=MetricType.COSINE,
+        index_type=IndexType.HNSW
+    ),
+    
+    # Sparse keyword vector (INVERT)
+    Field(
+        name="sparse_vec",
+        dtype=DataType.SPARSE_VECTOR_FP32,
+        index_type=IndexType.INVERT
+    )
+]
+
+collection = Collection.create(name="hybrid_docs", schema=schema)
+
+# Query both dense and sparse vectors
+results = collection.query(
+    vectors={
+        "dense_vec": dense_embedding,
+        "sparse_vec": sparse_embedding
+    },
+    topn=10
+)
+```
+
+## Best Practices
+
+<Tip>
+  **General Recommendations**:
+  
+  1. **Start with HNSW** for most applications (< 100M vectors)
+  2. **Use FLAT** for small datasets or benchmarking
+  3. **Switch to IVF** when memory becomes a constraint
+  4. **Use INVERT** for sparse vectors (BM25, TF-IDF)
+  5. **Combine with quantization** for large-scale deployments
+  6. **Monitor recall** to ensure quality meets requirements
+</Tip>
+
+<Warning>
+  **Common Mistakes**:
+  
+  - Using FLAT for large datasets (> 100K vectors)
+  - Using HNSW without enough memory
+  - Not tuning IVF parameters for your dataset
+  - Using dense indexes for sparse vectors
+  - Ignoring recall metrics in production
+</Warning>
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Optimizing HNSW">
+    - Increase `m` for better recall (use 16-64)
+    - Increase `ef_construction` for better index quality (use 100-500)
+    - Increase `ef_search` for better query recall (use 32-128)
+    - Monitor memory usage as these increase index size
+  </Accordion>
+  
+  <Accordion title="Optimizing IVF">
+    - Set `nlist = sqrt(num_vectors)` as starting point
+    - Increase `nprobe` for better recall (1-50)
+    - Use quantization (INT8, INT4) to reduce memory
+    - Pre-train clusters on representative data
+  </Accordion>
+  
+  <Accordion title="Optimizing FLAT">
+    - Use only for small datasets (< 10K)
+    - Consider GPU acceleration for larger FLAT searches
+    - Use as baseline to measure ANN index quality
+  </Accordion>
+</AccordionGroup>
+
+## See Also
+
+- [Field Definition](/api/schema/field-schema) - Schema field configuration
+- [DataType](/api/types/data-type) - Vector data types
+- [MetricType](/api/types/metric-type) - Distance metrics
+- [QuantizeType](/api/types/quantize-type) - Vector quantization
+- [Performance Tuning](/guides/performance-tuning) - Optimization strategies

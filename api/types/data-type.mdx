@@ -1,0 +1,342 @@
+---
+title: DataType
+description: Enumeration of supported data types in Zvec
+---
+
+## Overview
+
+`DataType` is an enumeration that defines all supported data types in Zvec, including scalar types, dense/sparse vector types, and array types.
+
+```python
+import zvec
+
+print(zvec.DataType.VECTOR_FP32)
+# Output: DataType.VECTOR_FP32
+
+print(zvec.DataType.FLOAT)
+# Output: DataType.FLOAT
+```
+
+## Scalar Types
+
+Basic data types for single values.
+
+<ParamField path="STRING" type="DataType">
+  String/text data type. Stores text values of variable length.
+  ```python
+  field = Field(name="title", dtype=DataType.STRING)
+  ```
+</ParamField>
+
+<ParamField path="BOOL" type="DataType">
+  Boolean data type. Stores `True` or `False` values.
+  ```python
+  field = Field(name="is_active", dtype=DataType.BOOL)
+  ```
+</ParamField>
+
+<ParamField path="INT32" type="DataType">
+  32-bit signed integer (-2,147,483,648 to 2,147,483,647).
+  ```python
+  field = Field(name="count", dtype=DataType.INT32)
+  ```
+</ParamField>
+
+<ParamField path="INT64" type="DataType">
+  64-bit signed integer (-9,223,372,036,854,775,808 to 9,223,372,036,854,775,807).
+  ```python
+  field = Field(name="timestamp", dtype=DataType.INT64)
+  ```
+</ParamField>
+
+<ParamField path="UINT32" type="DataType">
+  32-bit unsigned integer (0 to 4,294,967,295).
+  ```python
+  field = Field(name="id", dtype=DataType.UINT32)
+  ```
+</ParamField>
+
+<ParamField path="UINT64" type="DataType">
+  64-bit unsigned integer (0 to 18,446,744,073,709,551,615).
+  ```python
+  field = Field(name="large_id", dtype=DataType.UINT64)
+  ```
+</ParamField>
+
+<ParamField path="FLOAT" type="DataType">
+  32-bit floating point number (single precision).
+  ```python
+  field = Field(name="score", dtype=DataType.FLOAT)
+  ```
+</ParamField>
+
+<ParamField path="DOUBLE" type="DataType">
+  64-bit floating point number (double precision).
+  ```python
+  field = Field(name="price", dtype=DataType.DOUBLE)
+  ```
+</ParamField>
+
+## Dense Vector Types
+
+Fixed-dimensional dense vectors for embeddings.
+
+<ParamField path="VECTOR_FP16" type="DataType">
+  Dense vector with 16-bit floating point elements (half precision). More memory-efficient than FP32 with slight precision loss.
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP16,
+      dim=768
+  )
+  ```
+</ParamField>
+
+<ParamField path="VECTOR_FP32" type="DataType">
+  Dense vector with 32-bit floating point elements (single precision). Most common vector type for embeddings.
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=1536
+  )
+  ```
+</ParamField>
+
+<ParamField path="VECTOR_FP64" type="DataType">
+  Dense vector with 64-bit floating point elements (double precision). Highest precision but uses more memory.
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP64,
+      dim=512
+  )
+  ```
+</ParamField>
+
+<ParamField path="VECTOR_INT8" type="DataType">
+  Dense vector with 8-bit signed integer elements. Used for quantized embeddings.
+  ```python
+  field = Field(
+      name="quantized_embedding",
+      dtype=DataType.VECTOR_INT8,
+      dim=384
+  )
+  ```
+</ParamField>
+
+## Sparse Vector Types
+
+Sparse vectors for high-dimensional spaces where most elements are zero.
+
+<ParamField path="SPARSE_VECTOR_FP16" type="DataType">
+  Sparse vector with 16-bit floating point values. Stores only non-zero elements.
+  ```python
+  field = Field(
+      name="sparse_embedding",
+      dtype=DataType.SPARSE_VECTOR_FP16
+  )
+  ```
+</ParamField>
+
+<ParamField path="SPARSE_VECTOR_FP32" type="DataType">
+  Sparse vector with 32-bit floating point values. Most common sparse vector type.
+  ```python
+  field = Field(
+      name="bm25_vector",
+      dtype=DataType.SPARSE_VECTOR_FP32
+  )
+  ```
+</ParamField>
+
+## Array Types
+
+Variable-length arrays of scalar values.
+
+<ParamField path="ARRAY_STRING" type="DataType">
+  Array of strings. Stores multiple text values.
+  ```python
+  field = Field(name="tags", dtype=DataType.ARRAY_STRING)
+  # Example: ["python", "tutorial", "beginner"]
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_BOOL" type="DataType">
+  Array of boolean values.
+  ```python
+  field = Field(name="flags", dtype=DataType.ARRAY_BOOL)
+  # Example: [True, False, True]
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_INT32" type="DataType">
+  Array of 32-bit signed integers.
+  ```python
+  field = Field(name="ratings", dtype=DataType.ARRAY_INT32)
+  # Example: [5, 4, 3, 5]
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_INT64" type="DataType">
+  Array of 64-bit signed integers.
+  ```python
+  field = Field(name="timestamps", dtype=DataType.ARRAY_INT64)
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_UINT32" type="DataType">
+  Array of 32-bit unsigned integers.
+  ```python
+  field = Field(name="ids", dtype=DataType.ARRAY_UINT32)
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_UINT64" type="DataType">
+  Array of 64-bit unsigned integers.
+  ```python
+  field = Field(name="large_ids", dtype=DataType.ARRAY_UINT64)
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_FLOAT" type="DataType">
+  Array of 32-bit floating point numbers.
+  ```python
+  field = Field(name="scores", dtype=DataType.ARRAY_FLOAT)
+  # Example: [0.95, 0.87, 0.92]
+  ```
+</ParamField>
+
+<ParamField path="ARRAY_DOUBLE" type="DataType">
+  Array of 64-bit floating point numbers.
+  ```python
+  field = Field(name="coordinates", dtype=DataType.ARRAY_DOUBLE)
+  # Example: [40.7128, -74.0060]
+  ```
+</ParamField>
+
+## Usage Examples
+
+### Defining Schema with Data Types
+
+```python
+from zvec import Collection, Field, DataType
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="title", dtype=DataType.STRING),
+    Field(name="views", dtype=DataType.INT64),
+    Field(name="rating", dtype=DataType.FLOAT),
+    Field(name="is_published", dtype=DataType.BOOL),
+    Field(name="tags", dtype=DataType.ARRAY_STRING),
+    Field(
+        name="title_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768
+    ),
+    Field(
+        name="content_embedding",
+        dtype=DataType.VECTOR_FP16,
+        dim=1536
+    ),
+    Field(
+        name="bm25_sparse",
+        dtype=DataType.SPARSE_VECTOR_FP32
+    )
+]
+
+collection = Collection.create(
+    name="articles",
+    schema=schema
+)
+```
+
+### Checking Data Type
+
+```python
+import zvec
+
+field = Field(name="vec", dtype=DataType.VECTOR_FP32, dim=384)
+
+print(field.dtype)  # DataType.VECTOR_FP32
+print(field.dtype.name)  # "VECTOR_FP32"
+print(field.dtype.value)  # 23
+
+if field.dtype == DataType.VECTOR_FP32:
+    print("This is a 32-bit float vector")
+```
+
+### Vector Type Comparison
+
+```python
+from zvec import DataType
+
+# Memory usage comparison for 1536-dimensional vector
+vector_types = [
+    (DataType.VECTOR_FP64, 1536 * 8),   # 12,288 bytes
+    (DataType.VECTOR_FP32, 1536 * 4),   # 6,144 bytes
+    (DataType.VECTOR_FP16, 1536 * 2),   # 3,072 bytes
+    (DataType.VECTOR_INT8, 1536 * 1),   # 1,536 bytes
+]
+
+for dtype, bytes_per_vec in vector_types:
+    print(f"{dtype.name}: {bytes_per_vec:,} bytes per vector")
+```
+
+## Type Properties
+
+All `DataType` enum members have these properties:
+
+<ResponseField name="name" type="str">
+  The name of the data type as a string.
+  ```python
+  DataType.VECTOR_FP32.name  # "VECTOR_FP32"
+  ```
+</ResponseField>
+
+<ResponseField name="value" type="int">
+  The internal integer value of the data type.
+  ```python
+  DataType.VECTOR_FP32.value  # 23
+  ```
+</ResponseField>
+
+## Choosing the Right Data Type
+
+### For Vectors
+
+<Tip>
+  **Vector Type Selection**:
+  - **VECTOR_FP32**: Default choice, balanced precision and performance
+  - **VECTOR_FP16**: 50% memory savings, slight accuracy loss
+  - **VECTOR_INT8**: 75% memory savings, requires quantization
+  - **VECTOR_FP64**: Maximum precision, rarely needed
+  - **SPARSE_VECTOR_FP32**: High-dimensional sparse data (e.g., BM25)
+</Tip>
+
+### For Scalars
+
+<Tip>
+  **Scalar Type Selection**:
+  - **STRING**: Text, IDs, names
+  - **INT64**: Timestamps, large counts
+  - **INT32**: Counts, small integers
+  - **FLOAT**: Scores, ratings, percentages
+  - **DOUBLE**: High-precision measurements
+  - **BOOL**: Flags, binary states
+</Tip>
+
+### For Arrays
+
+<Tip>
+  **Array Type Selection**:
+  - **ARRAY_STRING**: Tags, categories, keywords
+  - **ARRAY_INT32/INT64**: Multiple IDs, lists of counts
+  - **ARRAY_FLOAT/DOUBLE**: Multiple scores, coordinates
+</Tip>
+
+## See Also
+
+- [Field Definition](/api/schema/field-schema)
+- [Collection Schema](/api/collection/insert)
+- [MetricType](/api/types/metric-type) - Distance metrics for vectors
+- [QuantizeType](/api/types/quantize-type) - Vector quantization options

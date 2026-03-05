@@ -1,0 +1,312 @@
+---
+title: "SparseEmbeddingFunction"
+description: "Protocol for sparse vector embedding functions"
+---
+
+## Overview
+
+`SparseEmbeddingFunction` is a Protocol class that defines the interface for sparse vector embedding functions in Zvec. Sparse embeddings map multimodal input to dictionary-based vectors where only non-zero dimensions are stored as `{index: weight}` pairs.
+
+<Info>
+**Protocol Class**: This is a Protocol class - it only defines the `embed()` interface. Implementations can define their own initialization and properties.
+</Info>
+
+## Class Definition
+
+```python
+from zvec.extension import SparseEmbeddingFunction
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class SparseEmbeddingFunction(Protocol[MD]):
+    """Protocol for sparse vector embedding functions."""
+    
+    @abstractmethod
+    def embed(self, input: MD) -> SparseVectorType:
+        """Generate a sparse embedding for the input data."""
+        ...
+```
+
+**Location**: `python/zvec/extension/embedding_function.py:88`
+
+## Type Parameters
+
+- **MD**: The type of input data (bound to Embeddable: TEXT, IMAGE, or AUDIO)
+
+## Methods
+
+### embed()
+
+```python
+def embed(self, input: MD) -> SparseVectorType:
+    """Generate a sparse embedding for the input data."""
+```
+
+**Parameters:**
+- `input` (MD): Multimodal input data to embed. Can be:
+  - **TEXT** (`str`): Text string
+  - **IMAGE** (`str | bytes | np.ndarray`): Image file path, raw bytes, or array
+  - **AUDIO** (`str | bytes | np.ndarray`): Audio file path, raw bytes, or array
+
+**Returns:**
+- `SparseVectorType`: Dictionary mapping dimension index (int) to non-zero weight (float)
+  - Only dimensions with non-zero values are included
+  - Example: `{10: 0.5, 245: 0.8, 1023: 1.2}`
+
+## Sparse Vector Format
+
+Sparse embeddings use a dictionary format for efficiency:
+
+```python
+# Example sparse vector
+sparse_vector = {
+    0: 0.5,      # Dimension 0 has weight 0.5
+    42: 1.2,     # Dimension 42 has weight 1.2
+    100: 0.8,    # Dimension 100 has weight 0.8
+    # All other dimensions are implicitly 0
+}
+```
+
+**Advantages:**
+- **Memory efficient**: Only stores non-zero values
+- **Interpretable**: Each dimension can correspond to a vocabulary term
+- **Fast computation**: Sparse operations skip zero values
+
+## Built-in Implementations
+
+Zvec provides several built-in sparse embedding implementations:
+
+<CardGroup cols={2}>
+  <Card title="BM25EmbeddingFunction" href="/api/embeddings/bm25">
+    BM25-based lexical search using DashText SDK
+  </Card>
+  <Card title="QwenSparseEmbedding" href="/api/embeddings/qwen">
+    Sparse embeddings using Qwen/DashScope API
+  </Card>
+  <Card title="DefaultLocalSparseEmbedding" href="/api/embeddings/sentence-transformers">
+    Local sparse embeddings using SPLADE model
+  </Card>
+</CardGroup>
+
+## Custom Implementation
+
+Implement the `embed()` method to create your own sparse embedding function:
+
+### BM25 Example
+
+```python
+class MyBM25Embedding:
+    def __init__(self, vocab_size: int = 10000):
+        self.vocab_size = vocab_size
+        self.tokenizer = MyTokenizer()
+    
+    def embed(self, input: str) -> dict[int, float]:
+        """Generate BM25 sparse embedding."""
+        tokens = self.tokenizer.tokenize(input)
+        sparse_vector = {}
+        
+        for token_id, weight in self._calculate_bm25(tokens):
+            if weight > 0:
+                sparse_vector[token_id] = weight
+        
+        return sparse_vector
+    
+    def _calculate_bm25(self, tokens):
+        # BM25 calculation logic
+        for token in tokens:
+            token_id = self.tokenizer.token_to_id(token)
+            weight = self._compute_bm25_score(token)
+            yield token_id, weight
+
+# Usage
+emb = MyBM25Embedding(vocab_size=10000)
+sparse_vec = emb.embed("machine learning")
+print(sparse_vec)  # {145: 0.8, 892: 1.2, 3456: 0.5}
+```
+
+### Sparse Image Features Example
+
+```python
+import numpy as np
+from typing import Union
+
+class MySparseImageEmbedding:
+    def embed(self, input: Union[str, bytes, np.ndarray]) -> dict[int, float]:
+        """Extract sparse features from image."""
+        image = self._load_image(input)
+        features = self._extract_sparse_features(image)
+        
+        # Return only non-zero features
+        return {idx: val for idx, val in enumerate(features) if val != 0}
+    
+    def _load_image(self, input):
+        if isinstance(input, str):
+            return load_from_path(input)
+        return input
+    
+    def _extract_sparse_features(self, image):
+        # Extract sparse features (e.g., SIFT, ORB keypoints)
+        return extract_keypoint_features(image)
+```
+
+## Usage with Built-in Implementations
+
+### BM25 Example
+
+```python
+from zvec.extension import BM25EmbeddingFunction
+
+# Using built-in encoder (Chinese)
+bm25 = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="query"
+)
+
+sparse_vec = bm25.embed("机器学习算法")
+print(sparse_vec)
+# {1169440797: 0.29, 2045788977: 0.70, ...}
+```
+
+### Qwen Sparse Example
+
+```python
+from zvec.extension import QwenSparseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+sparse_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="query"
+)
+
+sparse_vec = sparse_emb.embed("machine learning")
+print(len(sparse_vec))  # Number of non-zero dimensions (~150-200)
+```
+
+### SPLADE Example
+
+```python
+from zvec.extension import DefaultLocalSparseEmbedding
+
+# No API key needed - runs locally
+sparse_emb = DefaultLocalSparseEmbedding(
+    encoding_type="query"
+)
+
+sparse_vec = sparse_emb.embed("natural language processing")
+print(type(sparse_vec))  # <class 'dict'>
+```
+
+## Common Operations
+
+### Similarity Calculation
+
+```python
+# Dot product for sparse vectors
+def sparse_dot_product(vec1: dict, vec2: dict) -> float:
+    """Calculate dot product of two sparse vectors."""
+    similarity = sum(
+        vec1.get(k, 0) * vec2.get(k, 0)
+        for k in set(vec1) | set(vec2)
+    )
+    return similarity
+
+# Example
+query_vec = query_emb.embed("what causes aging")
+doc_vec = doc_emb.embed("UV light causes skin aging and cataracts")
+similarity = sparse_dot_product(query_vec, doc_vec)
+print(f"Similarity: {similarity}")
+```
+
+### Inspecting Top Terms
+
+```python
+# Sort by weight to find most important terms
+sparse_vec = emb.embed("machine learning algorithms")
+top_terms = sorted(sparse_vec.items(), key=lambda x: x[1], reverse=True)[:5]
+
+for term_id, weight in top_terms:
+    print(f"Term {term_id}: {weight:.3f}")
+# Term 1023: 1.450
+# Term 245: 1.230
+# Term 8901: 0.980
+```
+
+### Converting to Dense
+
+```python
+def sparse_to_dense(sparse_vec: dict, dimension: int) -> list[float]:
+    """Convert sparse vector to dense format."""
+    dense_vec = [0.0] * dimension
+    for idx, val in sparse_vec.items():
+        if idx < dimension:
+            dense_vec[idx] = val
+    return dense_vec
+
+# Example
+dense_vec = sparse_to_dense(sparse_vec, dimension=30000)
+```
+
+## Asymmetric Retrieval
+
+Sparse embeddings are particularly effective for asymmetric retrieval:
+
+```python
+# Query encoder (optimized for short queries)
+query_emb = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="query"
+)
+
+# Document encoder (optimized for longer documents)
+doc_emb = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="document"
+)
+
+# Encode query and documents separately
+query_vec = query_emb.embed("what is machine learning")
+doc1_vec = doc_emb.embed("Machine learning is a subset of AI...")
+doc2_vec = doc_emb.embed("Deep learning uses neural networks...")
+
+# Calculate similarities
+sim1 = sparse_dot_product(query_vec, doc1_vec)
+sim2 = sparse_dot_product(query_vec, doc2_vec)
+```
+
+## Best Practices
+
+<Tip>
+**Hybrid Search**: Combine sparse and dense embeddings for optimal retrieval:
+
+```python
+# Dense for semantic similarity
+dense_vec = dense_emb.embed(query)
+
+# Sparse for lexical matching
+sparse_vec = sparse_emb.embed(query)
+
+# Combine scores: α * dense_score + (1-α) * sparse_score
+```
+</Tip>
+
+<Warning>
+**Memory Efficiency**: While sparse vectors are memory-efficient, ensure your vocabulary size is appropriate for your use case. Very large vocabularies may still consume significant memory.
+</Warning>
+
+## Use Cases
+
+- **Keyword Search**: Exact term matching and lexical search
+- **BM25 Ranking**: Traditional information retrieval
+- **Hybrid Retrieval**: Combining with dense embeddings
+- **Interpretability**: Understanding which terms contribute to similarity
+- **Domain-Specific Search**: Custom vocabularies for specialized domains
+
+## See Also
+
+- [Embedding Functions Overview](/api/embeddings/overview)
+- [DenseEmbeddingFunction](/api/embeddings/dense)
+- [BM25 Embeddings](/api/embeddings/bm25)
+- [Qwen Embeddings](/api/embeddings/qwen)
+- [Sentence Transformers](/api/embeddings/sentence-transformers)

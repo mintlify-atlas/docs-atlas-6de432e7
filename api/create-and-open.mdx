@@ -1,0 +1,121 @@
+---
+title: 'create_and_open'
+description: 'Create a new collection and open it for use'
+---
+
+## Function signature
+
+```python
+zvec.create_and_open(
+    path: str,
+    schema: CollectionSchema,
+    option: Optional[CollectionOption] = None,
+) -> Collection
+```
+
+Create a new collection and open it for use. If a collection already exists at the given path, it may raise an error depending on the underlying implementation.
+
+## Parameters
+
+<ParamField path="path" type="string" required>
+  Path or name of the collection to create.
+  
+  Can be a relative or absolute file system path where the collection data will be stored.
+</ParamField>
+
+<ParamField path="schema" type="CollectionSchema" required>
+  Schema defining the structure of the collection.
+  
+  Must be a `CollectionSchema` instance that specifies the collection name, fields, and their types.
+</ParamField>
+
+<ParamField path="option" type="CollectionOption">
+  Configuration options for opening the collection.
+  
+  Defaults to a default-constructed `CollectionOption()` if not provided.
+</ParamField>
+
+## Return value
+
+Returns a `Collection` instance, ready for operations such as inserting, querying, and updating data.
+
+## Exceptions
+
+- `TypeError`: If `path` is not a string, `schema` is not a `CollectionSchema`, or `option` is not a `CollectionOption`.
+- May raise additional errors if a collection already exists at the specified path or if the schema is invalid.
+
+## Examples
+
+### Create a simple collection
+
+Create a collection with basic fields:
+
+```python
+import zvec
+from zvec import CollectionSchema, FieldSchema, DataType
+
+# Initialize Zvec first
+zvec.init()
+
+# Define schema
+schema = CollectionSchema(
+    name="my_collection",
+    fields=[
+        FieldSchema("id", DataType.INT64, nullable=False),
+        FieldSchema("text", DataType.STRING, nullable=False),
+    ]
+)
+
+# Create and open collection
+coll = zvec.create_and_open("./my_collection", schema)
+```
+
+### Create with vector field
+
+Create a collection for vector similarity search:
+
+```python
+import zvec
+from zvec import CollectionSchema, FieldSchema, DataType
+
+zvec.init()
+
+schema = CollectionSchema(
+    name="embeddings",
+    fields=[
+        FieldSchema("id", DataType.INT64, nullable=False),
+        FieldSchema("embedding", DataType.FLOAT_VECTOR, dim=768, nullable=False),
+        FieldSchema("text", DataType.STRING, nullable=True),
+    ]
+)
+
+coll = zvec.create_and_open("./embeddings", schema)
+```
+
+### Create with custom options
+
+Specify collection options during creation:
+
+```python
+import zvec
+from zvec import CollectionSchema, FieldSchema, DataType, CollectionOption
+
+zvec.init()
+
+schema = CollectionSchema(
+    name="documents",
+    fields=[
+        FieldSchema("doc_id", DataType.INT64, nullable=False),
+        FieldSchema("content", DataType.STRING, nullable=False),
+    ]
+)
+
+option = CollectionOption()
+
+coll = zvec.create_and_open("./documents", schema, option)
+```
+
+## See also
+
+- [zvec.open](/api/open) - Open an existing collection
+- [zvec.init](/api/init) - Initialize Zvec before creating collections

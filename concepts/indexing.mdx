@@ -1,0 +1,588 @@
+---
+title: Indexing
+description: Optimize vector search performance with HNSW, IVF, Flat, and Inverted indexes
+---
+
+Indexing is critical for fast vector similarity search at scale. Without indexes, Zvec must perform **brute-force search** by comparing the query vector against every document in the collection, which becomes prohibitively slow as your dataset grows.
+
+## Why Indexing Matters
+
+Consider searching through 1 million 768-dimensional vectors:
+
+- **Without index (brute-force)**: ~1-5 seconds per query
+- **With HNSW index**: ~1-10 milliseconds per query
+
+Indexes enable **approximate nearest neighbor (ANN)** search, trading a small amount of accuracy for massive speed improvements.
+
+## Index Types Overview
+
+Zvec supports four index types:
+
+| Index Type | Best For | Search Speed | Memory Usage | Accuracy |
+|------------|----------|--------------|--------------|----------|
+| **HNSW** | Most use cases | Very fast | High | Excellent |
+| **IVF** | Large datasets, lower memory | Fast | Medium | Good |
+| **Flat** | Small datasets, exact search | Medium | Low | Perfect (100%) |
+| **Inverted** | Scalar field filtering | Very fast | Low | Perfect (100%) |
+
+## Vector Indexes
+
+Vector indexes are used for similarity search on vector fields.
+
+### HNSW (Hierarchical Navigable Small World)
+
+HNSW is the **recommended index** for most applications. It provides excellent recall with very fast query performance.
+
+#### How HNSW Works
+
+HNSW builds a multi-layer graph where:
+- Each vector is a node
+- Edges connect similar vectors
+- Upper layers enable long-range navigation
+- Bottom layer contains all vectors
+
+#### Creating an HNSW Index
+
+```python
+from zvec import HnswIndexParam, IndexOption
+
+# Define HNSW parameters
+index_param = HnswIndexParam(
+    m=16,                    # Number of bi-directional links per node
+    ef_construction=200,     # Size of dynamic candidate list during construction
+    ef=100                   # Size of dynamic candidate list during search (optional)
+)
+
+# Create index on vector field
+collection.create_index(
+    field_name="embedding",
+    index_param=index_param,
+    option=IndexOption()
+)
+```
+
+#### HNSW Parameters
+
+**`m` (default: 16)**
+- Number of connections per node in the graph
+- Higher → better recall, more memory, slower build time
+- Typical range: 8-64
+- Recommended: 16 for most cases, 32 for high-dimensional vectors
+
+**`ef_construction` (default: 200)**
+- Size of candidate list during index construction
+- Higher → better index quality, slower build time
+- Typical range: 100-500
+- Recommended: 200 for balanced quality/speed
+
+**`ef` (query time, default: 100)**
+- Size of candidate list during search
+- Higher → better recall, slower search
+- Can be adjusted per query using `HnswQueryParam`
+- Typical range: 50-500
+
+#### Query-Time Configuration
+
+```python
+from zvec import VectorQuery, HnswQueryParam
+
+# Adjust ef at query time for recall/speed tradeoff
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=[0.1, 0.2, 0.3, ...],
+        param=HnswQueryParam(ef=300)  # Higher ef → better recall
+    ),
+    topk=10
+)
+```
+
+#### HNSW Best Practices
+
+<AccordionGroup>
+  <Accordion title="Choosing m">
+    ```python
+    # Small datasets (< 100K vectors), low dimensions (< 256)
+    m = 8
+    
+    # Medium datasets (100K - 1M vectors), standard dimensions (256-1024)
+    m = 16  # Recommended default
+    
+    # Large datasets (> 1M vectors), high dimensions (> 1024)
+    m = 32
+    ```
+  </Accordion>
+
+  <Accordion title="Choosing ef_construction">
+    ```python
+    # Fast indexing, acceptable quality
+    ef_construction = 100
+    
+    # Balanced (recommended)
+    ef_construction = 200
+    
+    # High quality, slower indexing
+    ef_construction = 400
+    ```
+  </Accordion>
+
+  <Accordion title="Tuning query-time ef">
+    ```python
+    # Fast search, lower recall
+    param = HnswQueryParam(ef=50)
+    
+    # Balanced (recommended)
+    param = HnswQueryParam(ef=100)
+    
+    # High recall, slower search
+    param = HnswQueryParam(ef=300)
+    ```
+    
+    **Rule of thumb**: `ef` should be ≥ `topk` and typically 2-10x larger.
+  </Accordion>
+</AccordionGroup>
+
+### IVF (Inverted File Index)
+
+IVF partitions vectors into clusters, then searches only the nearest clusters. This reduces memory usage compared to HNSW.
+
+#### How IVF Works
+
+1. **Training**: Use k-means to partition vectors into `nlist` clusters
+2. **Indexing**: Assign each vector to its nearest cluster
+3. **Searching**: Search only `nprobe` nearest clusters to the query
+
+#### Creating an IVF Index
+
+```python
+from zvec import IVFIndexParam, IndexOption
+
+# Define IVF parameters
+index_param = IVFIndexParam(
+    nlist=100,               # Number of clusters
+    nprobe=10                # Number of clusters to search
+)
+
+# Create index
+collection.create_index(
+    field_name="embedding",
+    index_param=index_param,
+    option=IndexOption()
+)
+```
+
+#### IVF Parameters
+
+**`nlist` (default: 100)**
+- Number of clusters (Voronoi cells)
+- Higher → better recall, more memory, slower search
+- Typical range: sqrt(N) to 4*sqrt(N), where N = number of vectors
+- Example: For 1M vectors, use nlist ≈ 1000-4000
+
+**`nprobe` (default: 10)**
+- Number of clusters to search
+- Higher → better recall, slower search
+- Typical range: 1-100
+- Recommended: 10-20 for balanced recall/speed
+
+#### Query-Time Configuration
+
+```python
+from zvec import VectorQuery, IVFQueryParam
+
+# Adjust nprobe at query time
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=[0.1, 0.2, 0.3, ...],
+        param=IVFQueryParam(nprobe=20)  # Search more clusters
+    ),
+    topk=10
+)
+```
+
+#### IVF Best Practices
+
+```python
+import math
+
+# Calculate nlist based on dataset size
+num_vectors = 1_000_000
+nlist = int(math.sqrt(num_vectors))  # 1000 clusters
+
+# Set nprobe to 1-5% of nlist
+nprobe = max(10, int(nlist * 0.02))  # 20 clusters
+
+index_param = IVFIndexParam(nlist=nlist, nprobe=nprobe)
+```
+
+### Flat (Brute-Force Index)
+
+Flat index performs exact brute-force search. Use for small datasets or when you need perfect recall.
+
+#### Creating a Flat Index
+
+```python
+from zvec import FlatIndexParam
+
+# Flat index has no parameters
+index_param = FlatIndexParam()
+
+collection.create_index(
+    field_name="embedding",
+    index_param=index_param
+)
+```
+
+#### When to Use Flat
+
+<Card icon="check" iconType="solid">
+  **Use Flat index when:**
+  - Dataset is small (< 10,000 vectors)
+  - You need 100% recall (exact search)
+  - Query latency < 100ms is acceptable
+  - Memory is limited (Flat uses least memory)
+</Card>
+
+<Card icon="xmark" iconType="solid">
+  **Don't use Flat when:**
+  - Dataset is large (> 100,000 vectors)
+  - You need sub-10ms query latency
+  - You can tolerate 95-99% recall
+</Card>
+
+## Inverted Index (Scalar Fields)
+
+Inverted indexes accelerate **filtering** on scalar fields. They're essential for queries with filter expressions.
+
+### Creating an Inverted Index
+
+#### At Schema Creation
+
+```python
+from zvec import FieldSchema, DataType, InvertIndexParam
+
+# Define field with inverted index
+field = FieldSchema(
+    name="category",
+    data_type=DataType.STRING,
+    index_param=InvertIndexParam(enable_range_optimization=True)
+)
+```
+
+#### After Collection Creation
+
+```python
+from zvec import InvertIndexParam
+
+# Create inverted index on existing field
+collection.create_index(
+    field_name="category",
+    index_param=InvertIndexParam()
+)
+```
+
+### Inverted Index Use Cases
+
+```python
+# Without inverted index: slow full scan
+results = collection.query(
+    vectors=VectorQuery(...),
+    filter="category == 'electronics'"  # Scans all documents
+)
+
+# With inverted index: fast lookup
+collection.create_index("category", InvertIndexParam())
+results = collection.query(
+    vectors=VectorQuery(...),
+    filter="category == 'electronics'"  # Uses index, very fast
+)
+```
+
+### When to Add Inverted Indexes
+
+Add inverted indexes to fields used in filter expressions:
+
+```python
+from zvec import InvertIndexParam
+
+# Frequently filtered fields
+collection.create_index("category", InvertIndexParam())
+collection.create_index("status", InvertIndexParam())
+collection.create_index("user_id", InvertIndexParam())
+
+# Range queries benefit from range optimization
+collection.create_index(
+    "price",
+    InvertIndexParam(enable_range_optimization=True)
+)
+```
+
+## Index Management
+
+### Building Indexes
+
+Indexes can be created at schema definition or after collection creation:
+
+```python
+# Method 1: Define index in schema (recommended)
+from zvec import VectorSchema, HnswIndexParam
+
+schema = CollectionSchema(
+    name="my_collection",
+    vectors=VectorSchema(
+        name="embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=768,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    )
+)
+
+# Method 2: Create index after collection exists
+collection = zvec.open("./data/my_collection")
+collection.create_index(
+    field_name="embedding",
+    index_param=HnswIndexParam(m=16, ef_construction=200)
+)
+```
+
+### Dropping Indexes
+
+```python
+# Remove index from field (reverts to brute-force search)
+collection.drop_index("embedding")
+```
+
+### Rebuilding Indexes
+
+Rebuild indexes after bulk insertions or to apply new parameters:
+
+```python
+# Drop old index
+collection.drop_index("embedding")
+
+# Create new index with updated parameters
+collection.create_index(
+    field_name="embedding",
+    index_param=HnswIndexParam(m=32, ef_construction=400)  # Higher quality
+)
+```
+
+### Index Build Time
+
+Index construction time depends on dataset size and parameters:
+
+```python
+import time
+
+start = time.time()
+collection.create_index(
+    "embedding",
+    HnswIndexParam(m=16, ef_construction=200)
+)
+elapsed = time.time() - start
+print(f"Index built in {elapsed:.2f} seconds")
+```
+
+**Typical build times:**
+- 100K vectors: ~10-60 seconds (HNSW m=16)
+- 1M vectors: ~2-10 minutes (HNSW m=16)
+- 10M vectors: ~30-90 minutes (HNSW m=16)
+
+## Index Selection Guide
+
+<Steps>
+  <Step title="Determine dataset size">
+    ```python
+    num_vectors = collection.stats.doc_count
+    
+    if num_vectors < 10_000:
+        # Use Flat index
+        index_param = FlatIndexParam()
+    elif num_vectors < 1_000_000:
+        # Use HNSW with default parameters
+        index_param = HnswIndexParam(m=16, ef_construction=200)
+    else:
+        # Use HNSW with higher m for better quality
+        index_param = HnswIndexParam(m=32, ef_construction=400)
+    ```
+  </Step>
+
+  <Step title="Consider memory constraints">
+    ```python
+    # HNSW: High memory usage
+    # - Memory ≈ N * m * 2 * sizeof(id) + N * dim * sizeof(float)
+    # - Example: 1M vectors, 768D, m=16 → ~3.5 GB
+    
+    # IVF: Medium memory usage
+    # - Memory ≈ N * dim * sizeof(float) + nlist * dim * sizeof(float)
+    # - Example: 1M vectors, 768D, nlist=1000 → ~3 GB
+    
+    # Flat: Low memory usage
+    # - Memory ≈ N * dim * sizeof(float)
+    # - Example: 1M vectors, 768D → ~3 GB
+    ```
+  </Step>
+
+  <Step title="Evaluate recall requirements">
+    ```python
+    # Need 100% recall (exact search) → Use Flat
+    if require_exact_search:
+        index_param = FlatIndexParam()
+    
+    # Need 95-99% recall (approximate) → Use HNSW or IVF
+    else:
+        index_param = HnswIndexParam(m=16, ef_construction=200)
+    ```
+  </Step>
+
+  <Step title="Add inverted indexes for filters">
+    ```python
+    # Identify frequently filtered fields
+    filtered_fields = ["category", "status", "user_id"]
+    
+    # Create inverted indexes
+    for field_name in filtered_fields:
+        collection.create_index(
+            field_name,
+            InvertIndexParam()
+        )
+    ```
+  </Step>
+</Steps>
+
+## Performance Tuning
+
+### HNSW Recall vs Speed Tradeoff
+
+```python
+from zvec import VectorQuery, HnswQueryParam
+
+# Fast search (lower recall ~90%)
+fast_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=50)
+    ),
+    topk=10
+)
+
+# Balanced (recall ~95%)
+balanced_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=100)
+    ),
+    topk=10
+)
+
+# High recall (recall ~99%)
+high_recall_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=HnswQueryParam(ef=300)
+    ),
+    topk=10
+)
+```
+
+### IVF Recall vs Speed Tradeoff
+
+```python
+from zvec import VectorQuery, IVFQueryParam
+
+# Fast search (lower recall)
+fast_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=IVFQueryParam(nprobe=5)
+    ),
+    topk=10
+)
+
+# High recall (slower search)
+high_recall_results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector,
+        param=IVFQueryParam(nprobe=50)
+    ),
+    topk=10
+)
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Index after bulk insertions">
+    Create indexes **after** inserting your data, not before:
+    ```python
+    # Good: insert first, then index
+    collection.insert(docs)  # Insert all documents
+    collection.create_index("embedding", HnswIndexParam())  # Then build index
+    
+    # Less efficient: index exists during insertions
+    collection.create_index("embedding", HnswIndexParam())
+    collection.insert(docs)  # Slower insertions
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor index quality">
+    Test recall on a validation set:
+    ```python
+    # Get ground truth (exact search)
+    exact_results = collection.query(
+        vectors=VectorQuery(field_name="embedding", vector=query_vector),
+        topk=100
+    )
+    exact_ids = {doc.id for doc in exact_results}
+    
+    # Get approximate results
+    approx_results = collection.query(
+        vectors=VectorQuery(
+            field_name="embedding",
+            vector=query_vector,
+            param=HnswQueryParam(ef=100)
+        ),
+        topk=100
+    )
+    approx_ids = {doc.id for doc in approx_results}
+    
+    # Calculate recall
+    recall = len(exact_ids & approx_ids) / len(exact_ids)
+    print(f"Recall@100: {recall:.2%}")
+    ```
+  </Accordion>
+
+  <Accordion title="Optimize after index creation">
+    Run optimize to improve index quality:
+    ```python
+    from zvec import OptimizeOption
+    
+    # After creating index and inserting data
+    collection.create_index("embedding", HnswIndexParam())
+    collection.optimize(option=OptimizeOption())
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Querying" icon="search" href="/concepts/querying">
+    Learn how to execute vector similarity searches
+  </Card>
+  <Card title="Vectors" icon="vector-square" href="/concepts/vectors">
+    Understand vector types and dimensions
+  </Card>
+  <Card title="Collections" icon="database" href="/concepts/collections">
+    Manage collections and data operations
+  </Card>
+  <Card title="Schemas" icon="table" href="/concepts/schemas">
+    Define collection schemas
+  </Card>
+</CardGroup>

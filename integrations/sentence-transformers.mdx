@@ -1,0 +1,425 @@
+---
+title: Sentence Transformers
+description: Use local Sentence Transformer models with Zvec for embeddings and reranking
+---
+
+## Overview
+
+Zvec provides integration with Sentence Transformers for local (offline) embeddings and reranking:
+
+- **Dense embeddings**: `DefaultLocalDenseEmbedding` - Uses all-MiniLM-L6-v2 model
+- **Sparse embeddings**: `DefaultLocalSparseEmbedding` - Uses SPLADE model
+- **Reranking**: `DefaultLocalReRanker` - Uses cross-encoder models
+
+<Note>
+These models run entirely locally without requiring API keys or network connectivity (after initial download).
+</Note>
+
+## Installation
+
+```bash
+pip install sentence-transformers
+```
+
+For ModelScope support (recommended for users in China):
+
+```bash
+pip install sentence-transformers modelscope
+```
+
+## Dense Embeddings
+
+### Basic Usage
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding
+
+# Using Hugging Face (default)
+emb_func = DefaultLocalDenseEmbedding()
+vector = emb_func.embed("Hello, world!")
+
+print(f"Dimension: {len(vector)}")
+# Output: Dimension: 384
+```
+
+### Using ModelScope (China)
+
+For users in China who experience Hugging Face access issues:
+
+```python
+# Recommended for users in China
+emb_func = DefaultLocalDenseEmbedding(model_source="modelscope")
+vector = emb_func.embed("你好，世界！")
+```
+
+Alternatively, use Hugging Face mirror:
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+```python
+emb_func = DefaultLocalDenseEmbedding()  # Uses HF mirror
+vector = emb_func.embed("Hello, world!")
+```
+
+### GPU Acceleration
+
+```python
+# Use GPU for faster inference
+emb_func = DefaultLocalDenseEmbedding(device="cuda")
+vector = emb_func.embed("Machine learning is fascinating")
+
+# Apple Silicon
+emb_func = DefaultLocalDenseEmbedding(device="mps")
+```
+
+### Configuration Options
+
+```python
+emb_func = DefaultLocalDenseEmbedding(
+    model_source="huggingface",     # or "modelscope"
+    device="cuda",                   # "cpu", "cuda", "mps", or None
+    normalize_embeddings=True,       # L2 normalize vectors
+    batch_size=32                    # Batch size for encoding
+)
+```
+
+### Semantic Similarity
+
+```python
+import numpy as np
+
+emb_func = DefaultLocalDenseEmbedding()
+
+v1 = emb_func.embed("The cat sits on the mat")
+v2 = emb_func.embed("A feline rests on a rug")
+v3 = emb_func.embed("Python programming")
+
+similarity_high = np.dot(v1, v2)  # Similar sentences
+similarity_low = np.dot(v1, v3)   # Different topics
+
+print(f"High similarity: {similarity_high:.4f}")
+print(f"Low similarity: {similarity_low:.4f}")
+```
+
+## Sparse Embeddings
+
+### Basic Usage
+
+Sparse embeddings are ideal for keyword-based search and hybrid retrieval:
+
+```python
+from zvec.extension import DefaultLocalSparseEmbedding
+
+# Query embedding
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+query_vec = query_emb.embed("machine learning algorithms")
+
+print(f"Type: {type(query_vec)}")
+print(f"Non-zero dimensions: {len(query_vec)}")
+# Output: Type: <class 'dict'>
+# Output: Non-zero dimensions: 156
+```
+
+### Asymmetric Retrieval
+
+```python
+# Query embedding
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+query_vec = query_emb.embed("what causes aging fast")
+
+# Document embedding
+doc_emb = DefaultLocalSparseEmbedding(encoding_type="document")
+doc_vec = doc_emb.embed(
+    "UV-A light causes tanning, skin aging, and cataracts..."
+)
+
+# Calculate similarity (dot product)
+similarity = sum(
+    query_vec.get(k, 0) * doc_vec.get(k, 0)
+    for k in set(query_vec) | set(doc_vec)
+)
+```
+
+### Memory-Efficient Model Caching
+
+Both instances share the same underlying model to save memory:
+
+```python
+# Both instances share the same model (~200MB, not 400MB)
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+doc_emb = DefaultLocalSparseEmbedding(encoding_type="document")
+# Total memory: ~200MB thanks to model caching
+```
+
+### Cache Management
+
+```python
+# Check cache status
+info = DefaultLocalSparseEmbedding.get_cache_info()
+print(f"Cached models: {info['cached_models']}")
+
+# Clear cache to free memory
+DefaultLocalSparseEmbedding.clear_cache()
+
+# Remove specific model from cache
+removed = DefaultLocalSparseEmbedding.remove_from_cache(device="cuda")
+print(f"Removed: {removed}")
+```
+
+### Hybrid Retrieval
+
+Combine dense and sparse embeddings for best retrieval performance:
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding, DefaultLocalSparseEmbedding
+
+dense_emb = DefaultLocalDenseEmbedding()
+sparse_emb = DefaultLocalSparseEmbedding()
+
+query = "deep learning neural networks"
+dense_vec = dense_emb.embed(query)   # [0.1, -0.3, 0.5, ...]
+sparse_vec = sparse_emb.embed(query) # {12: 0.8, 45: 1.2, ...}
+```
+
+## Reranking
+
+### Basic Usage
+
+```python
+from zvec.extension import DefaultLocalReRanker
+from zvec import Collection
+
+# Initialize reranker
+reranker = DefaultLocalReRanker(
+    query="machine learning algorithms",
+    topn=5,
+    rerank_field="content"
+)
+
+# Use in collection query
+results = collection.query(
+    data={"vector": [query_vector]},
+    reranker=reranker,
+    topk=20  # Retrieve 20, rerank to top 5
+)
+```
+
+### Model Selection
+
+```python
+# Default: MS MARCO MiniLM-L6-v2 (lightweight, fast, ~80MB)
+reranker = DefaultLocalReRanker(
+    query="neural networks",
+    topn=5,
+    rerank_field="content"
+)
+
+# Better accuracy: MS MARCO MiniLM-L12-v2 (~120MB)
+reranker = DefaultLocalReRanker(
+    query="neural networks",
+    topn=5,
+    rerank_field="content",
+    model_name="cross-encoder/ms-marco-MiniLM-L12-v2"
+)
+
+# Highest quality: BGE Reranker Large (~560MB)
+reranker = DefaultLocalReRanker(
+    query="neural networks",
+    topn=5,
+    rerank_field="content",
+    model_name="BAAI/bge-reranker-large",
+    device="cuda",
+    batch_size=64
+)
+```
+
+### Available Models
+
+| Model | Size | Description |
+|-------|------|-------------|
+| `cross-encoder/ms-marco-MiniLM-L6-v2` | ~80MB | Lightweight, fast (default) |
+| `cross-encoder/ms-marco-MiniLM-L12-v2` | ~120MB | Better accuracy |
+| `BAAI/bge-reranker-base` | ~280MB | BGE Reranker Base |
+| `BAAI/bge-reranker-large` | ~560MB | Highest quality |
+
+### Using ModelScope (China)
+
+```python
+reranker = DefaultLocalReRanker(
+    query="机器学习算法",
+    topn=10,
+    rerank_field="content",
+    model_source="modelscope"
+)
+```
+
+### Configuration Options
+
+```python
+reranker = DefaultLocalReRanker(
+    query="machine learning",           # Required: query text
+    topn=10,                             # Number of results to return
+    rerank_field="content",              # Required: document field
+    model_name="cross-encoder/ms-marco-MiniLM-L6-v2",
+    model_source="huggingface",         # or "modelscope"
+    device="cuda",                       # "cpu", "cuda", "mps", or None
+    batch_size=32                        # Batch size for processing
+)
+```
+
+## Using with Zvec Collections
+
+### Dense Embeddings
+
+```python
+from zvec import Collection, DataType
+from zvec.extension import DefaultLocalDenseEmbedding
+
+emb_func = DefaultLocalDenseEmbedding()
+
+collection = Collection(name="documents")
+collection.create_field("id", DataType.INT64, is_primary=True)
+collection.create_field("text", DataType.VARCHAR, max_length=512)
+collection.create_field(
+    name="vector",
+    dtype=DataType.VECTOR_FP32,
+    dimension=384,
+    embedding_function=emb_func
+)
+collection.create()
+
+# Insert data - embeddings generated automatically
+collection.insert([
+    {"id": 1, "text": "Introduction to machine learning"},
+    {"id": 2, "text": "Deep learning with neural networks"},
+    {"id": 3, "text": "Natural language processing basics"}
+])
+
+# Query with automatic embedding
+results = collection.query(
+    data={"vector": ["machine learning algorithms"]},
+    output_fields=["id", "text"],
+    topk=2
+)
+
+for result in results:
+    print(f"ID: {result['id']}, Text: {result['text']}")
+```
+
+### Sparse Embeddings
+
+```python
+from zvec import Collection, DataType
+from zvec.extension import DefaultLocalSparseEmbedding
+
+sparse_func = DefaultLocalSparseEmbedding(encoding_type="document")
+
+collection = Collection(name="documents")
+collection.create_field("id", DataType.INT64, is_primary=True)
+collection.create_field("text", DataType.VARCHAR, max_length=512)
+collection.create_field(
+    name="sparse_vector",
+    dtype=DataType.VECTOR_SPARSE_FP32,
+    dimension=30522,  # SPLADE vocabulary size
+    embedding_function=sparse_func
+)
+collection.create()
+```
+
+## Error Handling
+
+```python
+try:
+    emb_func = DefaultLocalDenseEmbedding()
+    emb_func.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Output: Error: Input text cannot be empty or whitespace only
+
+try:
+    emb_func.embed(123)  # Non-string input
+except TypeError as e:
+    print(f"Error: {e}")
+    # Output: Error: Expected 'input' to be str, got int
+```
+
+## DefaultLocalDenseEmbedding Configuration
+
+<ParamField path="model_source" type="string" default="huggingface">
+  Model source: `"huggingface"` or `"modelscope"`
+</ParamField>
+
+<ParamField path="device" type="string" default="None">
+  Device to run the model on: `"cpu"`, `"cuda"`, `"mps"`, or `None` for automatic detection
+</ParamField>
+
+<ParamField path="normalize_embeddings" type="bool" default="True">
+  Whether to normalize embeddings to unit length (L2 normalization)
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Batch size for encoding
+</ParamField>
+
+## DefaultLocalSparseEmbedding Configuration
+
+<ParamField path="model_source" type="string" default="huggingface">
+  Model source: `"huggingface"` or `"modelscope"`
+</ParamField>
+
+<ParamField path="device" type="string" default="None">
+  Device to run the model on
+</ParamField>
+
+<ParamField path="encoding_type" type="string" default="query">
+  Encoding type: `"query"` or `"document"`
+</ParamField>
+
+## DefaultLocalReRanker Configuration
+
+<ParamField path="query" type="string" required>
+  Query text for semantic re-ranking
+</ParamField>
+
+<ParamField path="topn" type="int" default="10">
+  Maximum number of documents to return after re-ranking
+</ParamField>
+
+<ParamField path="rerank_field" type="string" required>
+  Document field name to use as re-ranking input text
+</ParamField>
+
+<ParamField path="model_name" type="string" default="cross-encoder/ms-marco-MiniLM-L6-v2">
+  Cross-encoder model identifier or local path
+</ParamField>
+
+<ParamField path="model_source" type="string" default="huggingface">
+  Model source: `"huggingface"` or `"modelscope"`
+</ParamField>
+
+<ParamField path="device" type="string" default="None">
+  Device to run the model on
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Batch size for processing query-document pairs
+</ParamField>
+
+## Notes
+
+- **DefaultLocalDenseEmbedding**: Uses all-MiniLM-L6-v2 (Hugging Face) or nlp_gte_sentence-embedding_chinese-small (ModelScope)
+- **DefaultLocalSparseEmbedding**: Uses naver/splade-cocondenser-ensembledistil
+- **DefaultLocalReRanker**: Uses cross-encoder/ms-marco-MiniLM-L6-v2 by default
+- Models are downloaded on first use and cached locally
+- No API keys or network required after initial download
+- GPU acceleration provides 5-10x speedup over CPU
+- Hugging Face cache: `~/.cache/torch/sentence_transformers/`
+- ModelScope cache: `~/.cache/modelscope/hub/`
+
+## See Also
+
+- [OpenAIDenseEmbedding](/integrations/openai) - API-based embeddings using OpenAI
+- [QwenDenseEmbedding](/integrations/qwen) - API-based embeddings using Qwen/DashScope
+- [BM25EmbeddingFunction](/integrations/bm25) - BM25-based sparse embeddings

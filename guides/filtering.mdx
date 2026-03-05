@@ -1,0 +1,527 @@
+---
+title: Filtering and Metadata
+description: Combine vector search with scalar filters for precise retrieval
+---
+
+Filtering lets you combine vector similarity search with scalar field conditions, enabling queries like "find similar documents published after 2023" or "search products in category X with price < $100".
+
+## Understanding Filtering
+
+Zvec supports two query modes:
+
+1. **Vector-only search**: Pure similarity ranking
+2. **Filtered vector search**: Similarity ranking over filtered candidates
+
+Filtering is powered by inverted indexes on scalar fields, making complex conditions efficient even on large collections.
+
+## Adding Scalar Fields
+
+<Steps>
+  <Step title="Define Scalar Fields in Schema">
+    Add fields that you want to filter on:
+
+    ```python
+    from zvec import CollectionSchema, FieldSchema, VectorSchema
+    from zvec import DataType, InvertIndexParam
+
+    schema = CollectionSchema(
+        name="products",
+        fields=[
+            # Filterable fields
+            FieldSchema(
+                "id",
+                DataType.INT64,
+                nullable=False,
+                index_param=InvertIndexParam(enable_range_optimization=True)
+            ),
+            FieldSchema(
+                "category",
+                DataType.STRING,
+                nullable=False,
+                index_param=InvertIndexParam()
+            ),
+            FieldSchema(
+                "price",
+                DataType.FLOAT,
+                nullable=True,
+                index_param=InvertIndexParam(enable_range_optimization=True)
+            ),
+            FieldSchema("in_stock", DataType.BOOL, nullable=True),
+            
+            # Non-filterable metadata
+            FieldSchema("description", DataType.STRING, nullable=True)
+        ],
+        vectors=[
+            VectorSchema("embedding", DataType.VECTOR_FP32, dimension=768)
+        ]
+    )
+    ```
+  </Step>
+
+  <Step title="Insert Documents with Fields">
+    ```python
+    from zvec import Doc
+    import zvec
+
+    zvec.init()
+    collection = zvec.create_and_open("./products", schema)
+
+    doc = Doc(
+        id="prod_001",
+        fields={
+            "id": 1,
+            "category": "electronics",
+            "price": 299.99,
+            "in_stock": True,
+            "description": "Wireless headphones with noise cancellation"
+        },
+        vectors={
+            "embedding": embedding_fn.embed("wireless headphones")
+        }
+    )
+
+    collection.insert(doc)
+    ```
+  </Step>
+</Steps>
+
+## Filter Syntax
+
+### Comparison Operators
+
+```python
+from zvec import VectorQuery
+
+# Equal
+results = collection.query(
+    filter="category = 'electronics'",
+    topk=10
+)
+
+# Not equal
+results = collection.query(
+    filter="category != 'books'",
+    topk=10
+)
+
+# Greater than / less than
+results = collection.query(
+    filter="price > 100.0",
+    topk=10
+)
+
+results = collection.query(
+    filter="price <= 500.0",
+    topk=10
+)
+
+# Range queries
+results = collection.query(
+    filter="price >= 50.0 and price <= 200.0",
+    topk=10
+)
+```
+
+### Logical Operators
+
+```python
+# AND: Both conditions must be true
+results = collection.query(
+    filter="category = 'electronics' and price < 300.0",
+    topk=10
+)
+
+# OR: At least one condition must be true
+results = collection.query(
+    filter="category = 'electronics' or category = 'appliances'",
+    topk=10
+)
+
+# Complex expressions with parentheses
+results = collection.query(
+    filter="(category = 'electronics' or category = 'appliances') and price < 500.0",
+    topk=10
+)
+```
+
+### IN Operator
+
+```python
+# Single value
+results = collection.query(
+    filter="id in (1)",
+    topk=10
+)
+
+# Multiple values
+results = collection.query(
+    filter="id in (1, 5, 10, 15)",
+    topk=10
+)
+
+# NOT IN
+results = collection.query(
+    filter="category not in ('books', 'toys')",
+    topk=10
+)
+```
+
+### Boolean Fields
+
+```python
+results = collection.query(
+    filter="in_stock = true",
+    topk=10
+)
+
+results = collection.query(
+    filter="in_stock = false",
+    topk=10
+)
+```
+
+## Combining Filters with Vector Search
+
+### Filter Then Search
+
+Apply filters first, then rank by vector similarity:
+
+```python
+from zvec import VectorQuery
+
+query_vector = embedding_fn.embed("wireless headphones")
+
+results = collection.query(
+    VectorQuery(
+        field_name="embedding",
+        vector=query_vector
+    ),
+    filter="category = 'electronics' and price < 400.0 and in_stock = true",
+    topk=10
+)
+
+for doc in results:
+    print(f"{doc.field('description')}: ${doc.field('price')}")
+    print(f"Similarity: {doc.score:.4f}\n")
+```
+
+### Query Without Vector
+
+Metadata-only query (no vector similarity):
+
+```python
+# Returns documents matching filter, no similarity ranking
+results = collection.query(
+    filter="price > 100.0 and price < 300.0",
+    topk=100
+)
+```
+
+## Index Parameters for Filtering
+
+### InvertIndexParam Options
+
+```python
+from zvec import InvertIndexParam
+
+# For range queries (>, <, >=, <=, between)
+range_index = InvertIndexParam(
+    enable_range_optimization=True  # Optimize for range filters
+)
+
+FieldSchema(
+    "price",
+    DataType.FLOAT,
+    index_param=range_index
+)
+
+# For exact matching and IN queries
+exact_index = InvertIndexParam(
+    enable_range_optimization=False
+)
+
+FieldSchema(
+    "category",
+    DataType.STRING,
+    index_param=exact_index
+)
+```
+
+<Tip>
+  Enable `enable_range_optimization=True` for numeric fields (INT*, FLOAT, DOUBLE) that you'll query with ranges. This significantly speeds up queries like `price > 100`.
+</Tip>
+
+### When to Add Indexes
+
+```python
+# Fields you'll filter on: ADD INDEX
+FieldSchema("category", DataType.STRING, index_param=InvertIndexParam())
+FieldSchema("price", DataType.FLOAT, index_param=InvertIndexParam(enable_range_optimization=True))
+
+# Fields you'll only read: NO INDEX
+FieldSchema("description", DataType.STRING, nullable=True)  # No index_param
+FieldSchema("thumbnail_url", DataType.STRING, nullable=True)
+```
+
+## Creating Indexes After Collection Creation
+
+Add indexes to existing fields:
+
+```python
+from zvec import IndexOption
+
+# Add index to existing field
+collection.create_index(
+    field_name="price",
+    index_param=InvertIndexParam(enable_range_optimization=True),
+    option=IndexOption()
+)
+
+# Verify index was created
+field = collection.schema.field("price")
+print(f"Index type: {field.index_param.type}")
+```
+
+## Data Type Support
+
+### Supported Types for Filtering
+
+| Type | Operators | Example |
+|------|-----------|--------|
+| **INT32, INT64** | =, !=, &lt;, &lt;=, &gt;, &gt;=, in | `id > 100` |
+| **UINT32, UINT64** | =, !=, &lt;, &lt;=, &gt;, &gt;=, in | `user_id in (1, 2, 3)` |
+| **FLOAT, DOUBLE** | =, !=, &lt;, &lt;=, &gt;, &gt;= | `price >= 99.99` |
+| **STRING** | =, !=, in | `category = 'electronics'` |
+| **BOOL** | = | `active = true` |
+
+<Warning>
+  String fields don't support range operators (`<`, `>`). Use exact matching (`=`, `!=`, `in`) only.
+</Warning>
+
+## Advanced Filtering Patterns
+
+### Multi-Condition Filters
+
+```python
+# Price range with category
+filter = """
+    category = 'electronics' and 
+    price >= 100.0 and 
+    price <= 500.0 and 
+    in_stock = true
+"""
+
+results = collection.query(
+    VectorQuery(field_name="embedding", vector=query_vec),
+    filter=filter,
+    topk=20
+)
+```
+
+### Dynamic Filter Building
+
+```python
+def build_filter(category=None, min_price=None, max_price=None, in_stock=None):
+    conditions = []
+    
+    if category:
+        conditions.append(f"category = '{category}'")
+    if min_price is not None:
+        conditions.append(f"price >= {min_price}")
+    if max_price is not None:
+        conditions.append(f"price <= {max_price}")
+    if in_stock is not None:
+        conditions.append(f"in_stock = {str(in_stock).lower()}")
+    
+    return " and ".join(conditions) if conditions else None
+
+# Use it
+filter_expr = build_filter(
+    category="electronics",
+    min_price=50.0,
+    max_price=300.0,
+    in_stock=True
+)
+
+results = collection.query(
+    VectorQuery(field_name="embedding", vector=query_vec),
+    filter=filter_expr,
+    topk=10
+)
+```
+
+### Exclude by IDs
+
+```python
+# Exclude specific documents (e.g., already seen)
+exclude_ids = [1, 5, 10]
+filter_expr = f"id not in ({', '.join(map(str, exclude_ids))})"
+
+results = collection.query(
+    VectorQuery(field_name="embedding", vector=query_vec),
+    filter=filter_expr,
+    topk=10
+)
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Index High-Cardinality Fields">
+    Fields with many unique values benefit most from indexes:
+
+    ```python
+    # High cardinality: INDEX THESE
+    FieldSchema("user_id", DataType.INT64, index_param=InvertIndexParam())
+    FieldSchema("product_sku", DataType.STRING, index_param=InvertIndexParam())
+
+    # Low cardinality: still index if you filter on them
+    FieldSchema("category", DataType.STRING, index_param=InvertIndexParam())
+    ```
+  </Step>
+
+  <Step title="Use Selective Filters">
+    More selective filters = faster queries:
+
+    ```python
+    # Selective: eliminates 90% of docs (fast)
+    filter = "category = 'rare_category'"
+
+    # Non-selective: matches 90% of docs (slower)
+    filter = "category != 'rare_category'"
+
+    # Balance with vector search
+    # Good: vector search over 10% of collection
+    filter = "price > 1000.0"  # Selective
+    ```
+  </Step>
+
+  <Step title="Optimize Range Queries">
+    ```python
+    # Optimized for ranges
+    FieldSchema(
+        "timestamp",
+        DataType.INT64,
+        index_param=InvertIndexParam(enable_range_optimization=True)
+    )
+
+    # Fast range query
+    results = collection.query(
+        filter="timestamp >= 1700000000 and timestamp <= 1700086400",
+        topk=100
+    )
+    ```
+  </Step>
+</Steps>
+
+## Filter Performance Guidelines
+
+| Filter Type | Performance | Notes |
+|-------------|-------------|-------|
+| Exact match with index | Very fast | `category = 'electronics'` |
+| Range with optimization | Fast | `price > 100` with `enable_range_optimization` |
+| IN with small list | Fast | `id in (1, 2, 3, 4, 5)` |
+| OR conditions | Moderate | Evaluates each condition |
+| NOT / != | Moderate | May scan many docs |
+| Complex nested conditions | Varies | Keep expressions simple |
+
+<Warning>
+  Avoid very long IN lists (>1000 items). Consider using range queries or restructuring your data instead.
+</Warning>
+
+## Common Patterns
+
+### Time-Range Queries
+
+```python
+# Store timestamps as INT64
+import time
+
+timestamp = int(time.time())
+
+doc = Doc(
+    id="doc_001",
+    fields={"id": 1, "timestamp": timestamp},
+    vectors={"embedding": vec}
+)
+
+# Query last 24 hours
+day_ago = int(time.time()) - 86400
+results = collection.query(
+    filter=f"timestamp >= {day_ago}",
+    topk=100
+)
+```
+
+### Category Faceting
+
+```python
+# Get results per category
+categories = ["electronics", "appliances", "furniture"]
+
+results_by_category = {}
+for cat in categories:
+    results = collection.query(
+        VectorQuery(field_name="embedding", vector=query_vec),
+        filter=f"category = '{cat}'",
+        topk=5
+    )
+    results_by_category[cat] = results
+```
+
+## Nullable Fields
+
+```python
+# Nullable fields can be missing or None
+FieldSchema("description", DataType.STRING, nullable=True)
+
+# Document without optional field
+doc = Doc(
+    id="doc_001",
+    fields={"id": 1},  # description not provided
+    vectors={"embedding": vec}
+)
+
+# Reading nullable field
+results = collection.fetch(["doc_001"])
+doc = results["doc_001"]
+print(doc.field("description"))  # None
+```
+
+<Tip>
+  Required fields (`nullable=False`) must be provided during insert. Optional fields (`nullable=True`) can be omitted.
+</Tip>
+
+## Troubleshooting
+
+### Filter Not Working?
+
+Check these common issues:
+
+```python
+# ❌ Wrong: Field has no index
+FieldSchema("category", DataType.STRING)  # Missing index_param
+results = collection.query(filter="category = 'books'")  # Slow or error
+
+# ✅ Correct: Field has index
+FieldSchema("category", DataType.STRING, index_param=InvertIndexParam())
+
+# ❌ Wrong: String comparison operators
+filter = "category > 'electronics'"  # Not supported
+
+# ✅ Correct: Use equality for strings
+filter = "category = 'electronics'"
+
+# ❌ Wrong: Type mismatch
+filter = "price = '100'"  # String value for numeric field
+
+# ✅ Correct: Match field type
+filter = "price = 100.0"
+```
+
+## Next Steps
+
+- Combine with [Hybrid Search](/guides/hybrid-search) for multi-vector filtering
+- Learn about [Dense Vectors](/guides/dense-vectors) and [Sparse Vectors](/guides/sparse-vectors)
+- Optimize queries with [Performance Tuning](/guides/performance-tuning)
+- Generate embeddings with [Embedding Functions](/guides/embeddings)

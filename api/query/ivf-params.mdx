@@ -1,0 +1,151 @@
+---
+title: 'IVFQueryParam'
+description: 'Query parameters for IVF index searches'
+---
+
+## Overview
+
+The `IVFQueryParam` class controls query-time parameters for IVF (Inverted File Index) searches. It allows you to control how many clusters (inverted lists) are searched, trading off between speed and accuracy.
+
+## Constructor
+
+```python
+IVFQueryParam(
+    nprobe: int = 10,
+    radius: float = 0.0,
+    is_linear: bool = False
+)
+```
+
+## Parameters
+
+<ParamField path="nprobe" type="int" default="10">
+  Number of closest clusters (inverted lists) to search. Higher values improve recall (accuracy) but increase search latency. This is the primary tuning parameter for IVF query performance.
+  
+  **Typical range:** 1-50. Higher values approach the accuracy of exhaustive search.
+</ParamField>
+
+<ParamField path="radius" type="float" default="0.0">
+  Search radius for range queries. When set to a value greater than 0, only results within this distance threshold will be returned. Default is 0.0 (disabled).
+</ParamField>
+
+<ParamField path="is_linear" type="bool" default="False">
+  Force linear (brute-force) search instead of using the IVF index. Useful for debugging or verifying index accuracy.
+</ParamField>
+
+## Properties
+
+### nprobe
+
+Number of inverted lists to search during IVF query.
+
+**Type:** `int`
+
+## Examples
+
+### Basic IVF query
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Standard query with default nprobe
+params = IVFQueryParam(nprobe=10)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### High accuracy search
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Search more clusters for better accuracy
+params = IVFQueryParam(nprobe=20)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Fast search with lower accuracy
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Search fewer clusters for faster queries
+params = IVFQueryParam(nprobe=5)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Range query
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Only return results within distance 0.8
+params = IVFQueryParam(nprobe=10, radius=0.8)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+### Force linear search
+
+```python
+from zvec import IVFQueryParam, VectorQuery
+
+# Bypass the index and use brute-force search
+params = IVFQueryParam(is_linear=True)
+
+query = VectorQuery(
+    field_name="embedding",
+    vector=[0.1, 0.2, 0.3],
+    param=params
+)
+```
+
+## Performance Tuning
+
+<Tip>
+  **Balancing speed and accuracy:**
+  - Start with `nprobe=10` (default)
+  - Decrease to 1-5 if speed is critical and you can tolerate lower recall
+  - Increase to 20-50 for higher accuracy when recall is critical
+  - The optimal value depends on your `n_list` setting during index construction
+</Tip>
+
+<Info>
+  **Rule of thumb:** Set `nprobe` to approximately 5-10% of your `n_list` value for a good balance between speed and accuracy.
+</Info>
+
+<Warning>
+  Setting `nprobe` equal to `n_list` effectively performs an exhaustive search, negating the performance benefits of using an IVF index.
+</Warning>
+
+## How IVF Search Works
+
+IVF indexes partition the vector space into clusters during index construction:
+
+1. The query vector is compared against cluster centroids
+2. The `nprobe` closest clusters are selected
+3. Only vectors in those clusters are searched
+4. This reduces the search space and improves performance
+
+## See Also
+
+- [IVFIndexParam](/api/index/ivf) - Index construction parameters for IVF
+- [VectorQuery](/api/query/vector-query) - Vector query class that uses these parameters

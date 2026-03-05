@@ -1,0 +1,197 @@
+---
+title: "CollectionSchema"
+description: "Define the structure of a collection with fields and vectors"
+---
+
+## Overview
+
+`CollectionSchema` defines the complete structure of a collection in Zvec. It specifies the collection name and its fields, including both scalar fields (e.g., integers, strings) and vector fields for similarity search.
+
+<Note>
+Field names must be unique across both scalar and vector fields within a collection.
+</Note>
+
+## Constructor
+
+```python
+CollectionSchema(
+    name: str,
+    fields: Optional[Union[FieldSchema, list[FieldSchema]]] = None,
+    vectors: Optional[Union[VectorSchema, list[VectorSchema]]] = None
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" required>
+  Name of the collection. Must be a non-empty string.
+</ParamField>
+
+<ParamField path="fields" type="FieldSchema | list[FieldSchema]">
+  One or more scalar field definitions. Can be a single `FieldSchema` instance or a list of them. Defaults to `None`.
+</ParamField>
+
+<ParamField path="vectors" type="VectorSchema | list[VectorSchema]">
+  One or more vector field definitions. Can be a single `VectorSchema` instance or a list of them. Defaults to `None`.
+</ParamField>
+
+### Raises
+
+- **TypeError**: If `fields` or `vectors` are of unsupported types
+- **ValueError**: If any field or vector name is duplicated
+
+## Properties
+
+<ResponseField name="name" type="str">
+  The name of the collection (read-only).
+</ResponseField>
+
+<ResponseField name="fields" type="list[FieldSchema]">
+  All scalar (non-vector) fields in the schema (read-only).
+</ResponseField>
+
+<ResponseField name="vectors" type="list[VectorSchema]">
+  All vector fields in the schema (read-only).
+</ResponseField>
+
+## Methods
+
+### field()
+
+Retrieve a scalar field by name.
+
+```python
+def field(name: str) -> Optional[FieldSchema]
+```
+
+<ParamField path="name" type="str" required>
+  Name of the field to retrieve.
+</ParamField>
+
+**Returns**: The `FieldSchema` if found, otherwise `None`.
+
+### vector()
+
+Retrieve a vector field by name.
+
+```python
+def vector(name: str) -> Optional[VectorSchema]
+```
+
+<ParamField path="name" type="str" required>
+  Name of the vector field to retrieve.
+</ParamField>
+
+**Returns**: The `VectorSchema` if found, otherwise `None`.
+
+## Examples
+
+### Basic collection with single fields
+
+```python
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+
+# Create a simple collection schema
+schema = CollectionSchema(
+    name="my_collection",
+    fields=FieldSchema("id", DataType.INT64),
+    vectors=VectorSchema("embedding", DataType.VECTOR_FP32, dimension=128)
+)
+
+print(schema.name)  # "my_collection"
+print(len(schema.fields))  # 1
+print(len(schema.vectors))  # 1
+```
+
+### Collection with multiple fields
+
+```python
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+from zvec.model.param import HnswIndexParam
+
+# Define multiple scalar fields
+fields = [
+    FieldSchema("id", DataType.INT64),
+    FieldSchema("title", DataType.STRING),
+    FieldSchema("author", DataType.STRING, nullable=True),
+    FieldSchema("created_at", DataType.INT64)
+]
+
+# Define multiple vector fields
+vectors = [
+    VectorSchema(
+        "text_embedding",
+        DataType.VECTOR_FP32,
+        dimension=384,
+        index_param=HnswIndexParam(m=16, ef_construction=200)
+    ),
+    VectorSchema(
+        "image_embedding",
+        DataType.VECTOR_FP16,
+        dimension=512
+    )
+]
+
+schema = CollectionSchema(
+    name="documents",
+    fields=fields,
+    vectors=vectors
+)
+
+print(schema)
+```
+
+### Accessing schema fields
+
+```python
+# Retrieve a specific field
+id_field = schema.field("id")
+if id_field:
+    print(f"Field: {id_field.name}, Type: {id_field.data_type}")
+
+# Retrieve a specific vector
+text_vector = schema.vector("text_embedding")
+if text_vector:
+    print(f"Vector: {text_vector.name}, Dimension: {text_vector.dimension}")
+
+# Iterate over all fields
+for field in schema.fields:
+    print(f"Scalar field: {field.name}")
+
+# Iterate over all vectors
+for vector in schema.vectors:
+    print(f"Vector field: {vector.name}")
+```
+
+### Using with create_and_open
+
+```python
+import zvec
+
+schema = zvec.CollectionSchema(
+    name="products",
+    fields=[
+        zvec.FieldSchema("product_id", zvec.DataType.STRING),
+        zvec.FieldSchema("price", zvec.DataType.FLOAT),
+        zvec.FieldSchema("category", zvec.DataType.STRING)
+    ],
+    vectors=zvec.VectorSchema(
+        "description_embedding",
+        zvec.DataType.VECTOR_FP32,
+        dimension=768
+    )
+)
+
+# Create collection with this schema
+collection = zvec.create_and_open(
+    path="./product_db",
+    schema=schema
+)
+```
+
+## See Also
+
+- [FieldSchema](/api/schema/field-schema) - Define scalar fields
+- [VectorSchema](/api/schema/vector-schema) - Define vector fields
+- [DataType](/api/schema/data-types) - Available data types
+- [create_and_open](/api/create-and-open) - Create collections with schemas

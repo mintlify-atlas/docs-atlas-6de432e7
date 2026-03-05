@@ -1,0 +1,513 @@
+---
+title: Status and StatusCode
+description: Error handling and operation status in Zvec
+---
+
+## Overview
+
+The `Status` class represents the outcome of Zvec operations, providing error codes and messages for debugging and error handling. It works together with `StatusCode` enum to indicate success or various failure conditions.
+
+```python
+from zvec.typing import Status, StatusCode
+
+s = Status()
+print(s.ok())  # True
+
+s = Status(StatusCode.NOT_FOUND, "Collection not found")
+print(s.code() == StatusCode.NOT_FOUND)  # True
+print(s.message())  # "Collection not found"
+```
+
+## Status Class
+
+### Constructor
+
+<ParamField path="Status()" type="constructor">
+  Create a status object representing success or failure.
+  
+  **Overloads**:
+  
+  ```python
+  # Success status
+  status = Status()
+  
+  # Error status
+  status = Status(code: StatusCode, message: str = "")
+  ```
+</ParamField>
+
+#### Parameters
+
+<ParamField path="code" type="StatusCode" default="StatusCode.OK">
+  The status code indicating success or type of failure.
+</ParamField>
+
+<ParamField path="message" type="str" default='""'>
+  Optional error message providing details about the failure.
+</ParamField>
+
+### Methods
+
+<ResponseField name="ok()" type="bool">
+  Returns `True` if the status is OK (successful), `False` otherwise.
+  
+  ```python
+  status = Status()
+  if status.ok():
+      print("Operation succeeded")
+  ```
+</ResponseField>
+
+<ResponseField name="code()" type="StatusCode">
+  Returns the status code.
+  
+  ```python
+  status = Status(StatusCode.INVALID_ARGUMENT, "Invalid dimension")
+  print(status.code())  # StatusCode.INVALID_ARGUMENT
+  ```
+</ResponseField>
+
+<ResponseField name="message()" type="str">
+  Returns the error message (may be empty).
+  
+  ```python
+  status = Status(StatusCode.NOT_FOUND, "Collection 'docs' not found")
+  print(status.message())  # "Collection 'docs' not found"
+  ```
+</ResponseField>
+
+### Static Factory Methods
+
+Convenience methods for creating common status objects:
+
+<ResponseField name="Status.OK()" type="Status">
+  Create a success status.
+  
+  ```python
+  status = Status.OK()
+  assert status.ok()
+  ```
+</ResponseField>
+
+<ResponseField name="Status.NotFound(message)" type="Status">
+  Create a NOT_FOUND error status.
+  
+  ```python
+  status = Status.NotFound("Document not found")
+  ```
+</ResponseField>
+
+<ResponseField name="Status.AlreadyExists(message)" type="Status">
+  Create an ALREADY_EXISTS error status.
+  
+  ```python
+  status = Status.AlreadyExists("Collection already exists")
+  ```
+</ResponseField>
+
+<ResponseField name="Status.InvalidArgument(message)" type="Status">
+  Create an INVALID_ARGUMENT error status.
+  
+  ```python
+  status = Status.InvalidArgument("Invalid vector dimension")
+  ```
+</ResponseField>
+
+<ResponseField name="Status.PermissionDenied(message)" type="Status">
+  Create a PERMISSION_DENIED error status.
+  
+  ```python
+  status = Status.PermissionDenied("Write access denied")
+  ```
+</ResponseField>
+
+<ResponseField name="Status.InternalError(message)" type="Status">
+  Create an INTERNAL_ERROR status.
+  
+  ```python
+  status = Status.InternalError("Database connection failed")
+  ```
+</ResponseField>
+
+## StatusCode Enum
+
+Enumeration of possible status codes:
+
+<ParamField path="OK" type="StatusCode">
+  Operation completed successfully.
+  
+  **Value**: `0`
+  
+  ```python
+  status = Status(StatusCode.OK)
+  assert status.ok()
+  ```
+</ParamField>
+
+<ParamField path="NOT_FOUND" type="StatusCode">
+  Requested resource was not found.
+  
+  **Value**: `1`
+  
+  **Examples**: Collection doesn't exist, document not found, field not in schema
+  
+  ```python
+  if status.code() == StatusCode.NOT_FOUND:
+      print("Resource not found")
+  ```
+</ParamField>
+
+<ParamField path="ALREADY_EXISTS" type="StatusCode">
+  Resource already exists.
+  
+  **Value**: `2`
+  
+  **Examples**: Collection name conflict, duplicate primary key
+  
+  ```python
+  if status.code() == StatusCode.ALREADY_EXISTS:
+      print("Resource already exists")
+  ```
+</ParamField>
+
+<ParamField path="INVALID_ARGUMENT" type="StatusCode">
+  Invalid argument provided.
+  
+  **Value**: `3`
+  
+  **Examples**: Wrong dimension, invalid data type, malformed query
+  
+  ```python
+  if status.code() == StatusCode.INVALID_ARGUMENT:
+      print(f"Invalid argument: {status.message()}")
+  ```
+</ParamField>
+
+<ParamField path="PERMISSION_DENIED" type="StatusCode">
+  Insufficient permissions for the operation.
+  
+  **Value**: `4`
+  
+  **Examples**: Read-only access, authentication failure
+  
+  ```python
+  if status.code() == StatusCode.PERMISSION_DENIED:
+      print("Access denied")
+  ```
+</ParamField>
+
+<ParamField path="FAILED_PRECONDITION" type="StatusCode">
+  Operation failed because a precondition was not met.
+  
+  **Value**: `5`
+  
+  **Examples**: Collection not loaded, index not built
+  
+  ```python
+  if status.code() == StatusCode.FAILED_PRECONDITION:
+      print("Precondition not met")
+  ```
+</ParamField>
+
+<ParamField path="RESOURCE_EXHAUSTED" type="StatusCode">
+  Resource exhausted (out of memory, disk full, etc.).
+  
+  **Value**: `6`
+  
+  **Examples**: Out of memory, disk quota exceeded
+  
+  ```python
+  if status.code() == StatusCode.RESOURCE_EXHAUSTED:
+      print("Resource exhausted")
+  ```
+</ParamField>
+
+<ParamField path="UNAVAILABLE" type="StatusCode">
+  Service is unavailable.
+  
+  **Value**: `7`
+  
+  **Examples**: Connection timeout, service down
+  
+  ```python
+  if status.code() == StatusCode.UNAVAILABLE:
+      print("Service unavailable")
+  ```
+</ParamField>
+
+<ParamField path="INTERNAL_ERROR" type="StatusCode">
+  Internal error occurred.
+  
+  **Value**: `8`
+  
+  **Examples**: Unexpected exception, database corruption
+  
+  ```python
+  if status.code() == StatusCode.INTERNAL_ERROR:
+      print(f"Internal error: {status.message()}")
+  ```
+</ParamField>
+
+<ParamField path="NOT_SUPPORTED" type="StatusCode">
+  Operation not supported.
+  
+  **Value**: `9`
+  
+  **Examples**: Unsupported feature, deprecated API
+  
+  ```python
+  if status.code() == StatusCode.NOT_SUPPORTED:
+      print("Operation not supported")
+  ```
+</ParamField>
+
+<ParamField path="UNKNOWN" type="StatusCode">
+  Unknown error.
+  
+  **Value**: `10`
+  
+  **Examples**: Unhandled exception, unexpected state
+  
+  ```python
+  if status.code() == StatusCode.UNKNOWN:
+      print(f"Unknown error: {status.message()}")
+  ```
+</ParamField>
+
+## Usage Examples
+
+### Basic Error Handling
+
+```python
+from zvec import Collection
+from zvec.typing import Status, StatusCode
+
+def load_collection(name: str) -> tuple[Collection | None, Status]:
+    try:
+        collection = Collection(name)
+        return collection, Status.OK()
+    except FileNotFoundError:
+        return None, Status.NotFound(f"Collection '{name}' not found")
+    except PermissionError:
+        return None, Status.PermissionDenied(f"No access to collection '{name}'")
+    except Exception as e:
+        return None, Status.InternalError(str(e))
+
+collection, status = load_collection("documents")
+if status.ok():
+    print(f"Loaded collection: {collection.name}")
+else:
+    print(f"Error: {status.message()}")
+```
+
+### Checking Status Codes
+
+```python
+from zvec import Collection, Field, DataType
+from zvec.typing import Status, StatusCode
+
+def create_collection_safe(name: str, schema: list[Field]) -> Status:
+    try:
+        Collection.create(name=name, schema=schema)
+        return Status.OK()
+    except ValueError as e:
+        return Status.InvalidArgument(str(e))
+    except FileExistsError:
+        return Status.AlreadyExists(f"Collection '{name}' already exists")
+    except Exception as e:
+        return Status.InternalError(str(e))
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="vec", dtype=DataType.VECTOR_FP32, dim=768)
+]
+
+status = create_collection_safe("docs", schema)
+
+if status.ok():
+    print("Collection created successfully")
+elif status.code() == StatusCode.ALREADY_EXISTS:
+    print("Collection already exists, using existing one")
+elif status.code() == StatusCode.INVALID_ARGUMENT:
+    print(f"Invalid schema: {status.message()}")
+else:
+    print(f"Failed to create collection: {status.message()}")
+```
+
+### Status Comparison
+
+```python
+from zvec.typing import Status, StatusCode
+
+status1 = Status.OK()
+status2 = Status()
+status3 = Status.NotFound("Not found")
+
+print(status1 == status2)  # True (both OK)
+print(status1 == status3)  # False (different codes)
+
+print(status1.code() == StatusCode.OK)  # True
+print(status3.code() == StatusCode.NOT_FOUND)  # True
+```
+
+### Handling Multiple Operations
+
+```python
+from zvec import Collection
+from zvec.typing import Status, StatusCode
+
+def batch_insert_with_status(collection: Collection, docs: list[dict]) -> Status:
+    """Insert multiple documents and return aggregated status."""
+    errors = []
+    
+    for i, doc in enumerate(docs):
+        try:
+            collection.insert(doc)
+        except ValueError as e:
+            errors.append(f"Doc {i}: {e}")
+        except Exception as e:
+            return Status.InternalError(f"Unexpected error at doc {i}: {e}")
+    
+    if errors:
+        return Status.InvalidArgument(
+            f"{len(errors)} documents failed: " + "; ".join(errors[:3])
+        )
+    
+    return Status.OK()
+
+collection = Collection("products")
+documents = [
+    {"id": "1", "name": "Product A", "vec": [0.1] * 768},
+    {"id": "2", "name": "Product B", "vec": [0.2] * 768},
+]
+
+status = batch_insert_with_status(collection, documents)
+if not status.ok():
+    print(f"Batch insert failed: {status.message()}")
+```
+
+### Retry Logic Based on Status
+
+```python
+import time
+from zvec import Collection
+from zvec.typing import Status, StatusCode
+
+def query_with_retry(
+    collection: Collection,
+    query_vec: list[float],
+    max_retries: int = 3
+) -> tuple[list, Status]:
+    """Query with retry logic for transient errors."""
+    
+    for attempt in range(max_retries):
+        try:
+            results = collection.query(
+                vectors={"embedding": query_vec},
+                topn=10
+            )
+            return results, Status.OK()
+        
+        except ConnectionError as e:
+            status = Status.Unavailable(str(e))
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+                continue
+            return [], status
+        
+        except ValueError as e:
+            # Don't retry for invalid arguments
+            return [], Status.InvalidArgument(str(e))
+        
+        except Exception as e:
+            return [], Status.InternalError(str(e))
+    
+    return [], Status.Unavailable("Max retries exceeded")
+
+collection = Collection("documents")
+query_vector = [0.5] * 768
+
+results, status = query_with_retry(collection, query_vector)
+
+if status.ok():
+    print(f"Found {len(results)} results")
+elif status.code() == StatusCode.UNAVAILABLE:
+    print(f"Service temporarily unavailable: {status.message()}")
+else:
+    print(f"Query failed: {status.message()}")
+```
+
+## Best Practices
+
+<Tip>
+  **Error Handling Guidelines**:
+  
+  1. **Check `ok()` first** before accessing results
+  2. **Use factory methods** (`Status.NotFound()`, etc.) for clarity
+  3. **Provide descriptive messages** to help debugging
+  4. **Match status codes** to specific error types
+  5. **Retry only transient errors** (UNAVAILABLE, RESOURCE_EXHAUSTED)
+  6. **Log error details** for monitoring and debugging
+</Tip>
+
+<Warning>
+  **Common Mistakes**:
+  
+  - Ignoring status checks and assuming success
+  - Using wrong status codes for error types
+  - Retrying non-transient errors indefinitely
+  - Not logging error messages
+  - Comparing status objects instead of codes
+</Warning>
+
+## Status Code Categories
+
+<Tabs>
+  <Tab title="Success">
+    - **OK**: Operation succeeded
+  </Tab>
+  
+  <Tab title="Client Errors (4xx-like)">
+    - **NOT_FOUND**: Resource doesn't exist
+    - **ALREADY_EXISTS**: Resource conflict
+    - **INVALID_ARGUMENT**: Bad input
+    - **FAILED_PRECONDITION**: Precondition not met
+    - **PERMISSION_DENIED**: Access denied
+  </Tab>
+  
+  <Tab title="Server Errors (5xx-like)">
+    - **UNAVAILABLE**: Service unavailable
+    - **RESOURCE_EXHAUSTED**: Out of resources
+    - **INTERNAL_ERROR**: Internal failure
+    - **NOT_SUPPORTED**: Feature not available
+    - **UNKNOWN**: Unexpected error
+  </Tab>
+</Tabs>
+
+## Retryable vs Non-Retryable
+
+### Retryable Errors
+
+These errors may be transient and worth retrying:
+
+- `UNAVAILABLE`: Service temporarily down
+- `RESOURCE_EXHAUSTED`: Temporary resource constraint
+
+### Non-Retryable Errors
+
+These errors indicate persistent problems that won't be fixed by retrying:
+
+- `NOT_FOUND`: Resource doesn't exist
+- `ALREADY_EXISTS`: Resource conflict
+- `INVALID_ARGUMENT`: Bad input data
+- `PERMISSION_DENIED`: Access control issue
+- `FAILED_PRECONDITION`: Requirement not met
+- `NOT_SUPPORTED`: Feature unavailable
+- `INTERNAL_ERROR`: Internal bug (may need manual intervention)
+
+## See Also
+
+- [Collection API](/api/collection/overview) - Collection operations
+- [Error Handling Guide](/api/types/status) - Error handling patterns
+- [DataType](/api/types/data-type) - Data type enum
+- [MetricType](/api/types/metric-type) - Metric type enum

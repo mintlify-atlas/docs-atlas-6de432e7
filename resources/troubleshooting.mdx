@@ -1,0 +1,623 @@
+---
+title: "Troubleshooting"
+description: "Common issues and solutions for Zvec"
+icon: "wrench"
+---
+
+## Installation Issues
+
+### Python Version Incompatibility
+
+**Problem**: `ERROR: Package 'zvec' requires a different Python: 3.9.x not in '>=3.10,<3.13'`
+
+**Solution**: Zvec requires Python 3.10, 3.11, or 3.12. Check your Python version:
+
+```bash
+python --version
+```
+
+If you're on an older version, install a compatible Python:
+
+```bash
+# Using conda
+conda create -n zvec_env python=3.11
+conda activate zvec_env
+pip install zvec
+
+# Using pyenv
+pyenv install 3.11.0
+pyenv virtualenv 3.11.0 zvec_env
+pyenv activate zvec_env
+pip install zvec
+```
+
+<Warning>
+  Python 3.13+ is not yet supported. Stick to Python 3.10-3.12.
+</Warning>
+
+---
+
+### Platform Not Supported
+
+**Problem**: `ERROR: No matching distribution found for zvec`
+
+**Solution**: Zvec currently supports:
+- Linux (x86_64, ARM64)
+- macOS (ARM64 only - Apple Silicon)
+
+Check your platform:
+
+```bash
+# Check OS
+uname -s
+
+# Check architecture
+uname -m  # Should show x86_64, aarch64, or arm64
+```
+
+If you're on an unsupported platform (Windows, macOS Intel), you'll need to:
+1. Use a supported platform (Linux VM, Docker, etc.)
+2. Wait for future platform support
+3. [Build from source](/advanced/building-from-source) (advanced)
+
+---
+
+### Import Errors After Installation
+
+**Problem**: `ImportError: cannot import name 'zvec' from 'zvec'` or `ModuleNotFoundError: No module named 'zvec'`
+
+**Solutions**:
+
+1. **Verify installation**:
+   ```bash
+   pip show zvec
+   ```
+
+2. **Check Python path**:
+   ```python
+   import sys
+   print(sys.path)
+   ```
+
+3. **Reinstall with cache clear**:
+   ```bash
+   pip uninstall zvec
+   pip install --no-cache-dir zvec
+   ```
+
+4. **Check for naming conflicts**:
+   ```bash
+   # Make sure you don't have a file named zvec.py in your working directory
+   ls -la zvec.py
+   ```
+
+<Tip>
+  If using a virtual environment, ensure it's activated before installing and running.
+</Tip>
+
+---
+
+### Build Errors When Installing from Source
+
+**Problem**: `CMake Error` or `C++ compiler error` when building
+
+**Solutions**:
+
+1. **Check CMake version** (requires ≥ 3.26, < 4.0):
+   ```bash
+   cmake --version
+   ```
+   
+   Install if needed:
+   ```bash
+   pip install cmake==3.27.0
+   ```
+
+2. **Check C++ compiler**:
+   ```bash
+   g++ --version  # Should be 11+
+   ```
+   
+   Install if needed:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install g++-11
+   
+   # macOS
+   xcode-select --install
+   ```
+
+3. **Initialize submodules**:
+   ```bash
+   git submodule update --init --recursive
+   ```
+
+4. **Clean build**:
+   ```bash
+   pip uninstall zvec
+   rm -rf build/ dist/ *.egg-info
+   pip install -e ".[dev]"
+   ```
+
+<Note>
+  See the [Building from Source guide](/advanced/building-from-source) for detailed build instructions.
+</Note>
+
+---
+
+## Runtime Errors
+
+### Collection Creation Failed
+
+**Problem**: `Status error when creating collection` or `Failed to create collection`
+
+**Solutions**:
+
+1. **Check directory permissions**:
+   ```bash
+   ls -la /path/to/collection
+   ```
+   Ensure you have write access.
+
+2. **Verify directory doesn't exist** (for create operations):
+   ```bash
+   rm -rf ./my_collection  # If you want to recreate
+   ```
+
+3. **Check schema validity**:
+   ```python
+   # Ensure schema is properly defined
+   schema = zvec.CollectionSchema(
+       name="test",
+       vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP32, 128)
+   )
+   print(schema)  # Verify schema
+   ```
+
+4. **Check disk space**:
+   ```bash
+   df -h /path/to/collection
+   ```
+
+---
+
+### Insert Operation Failed
+
+**Problem**: `Failed to insert documents` or `Invalid vector dimension`
+
+**Solutions**:
+
+1. **Verify vector dimensions match schema**:
+   ```python
+   # Schema specifies dimension 768
+   schema = zvec.CollectionSchema(
+       name="docs",
+       vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP32, 768)
+   )
+   
+   # Vector must be exactly 768 dimensions
+   doc = zvec.Doc(id="1", vectors={"embedding": [0.1] * 768})
+   collection.insert([doc])
+   ```
+
+2. **Check vector data type**:
+   ```python
+   # Ensure vector is a list of floats, not numpy array
+   import numpy as np
+   vector = np.random.rand(768)
+   doc = zvec.Doc(id="1", vectors={"embedding": vector.tolist()})  # Convert to list
+   ```
+
+3. **Verify document ID is unique**:
+   ```python
+   # Document IDs must be unique within a collection
+   # Use update() if you want to modify an existing document
+   ```
+
+4. **Check field names and types**:
+   ```python
+   # Field names must match schema
+   doc = zvec.Doc(
+       id="1",
+       vectors={"embedding": vector},
+       fields={"title": "Text", "count": 42}  # Match schema field names
+   )
+   ```
+
+<Warning>
+  Batch inserts are more efficient than single inserts. Insert multiple documents at once when possible.
+</Warning>
+
+---
+
+### Query Returns No Results
+
+**Problem**: Query executes but returns empty results
+
+**Solutions**:
+
+1. **Verify data was inserted**:
+   ```python
+   stats = collection.stats()
+   print(f"Document count: {stats['doc_count']}")
+   ```
+
+2. **Check if optimize is needed**:
+   ```python
+   # Optimize after bulk inserts
+   collection.optimize()
+   ```
+
+3. **Verify query vector dimensions**:
+   ```python
+   query_vector = [0.1] * 768  # Must match schema dimension
+   results = collection.query(
+       zvec.VectorQuery("embedding", vector=query_vector),
+       topk=10
+   )
+   ```
+
+4. **Increase topk or adjust parameters**:
+   ```python
+   # Try larger topk
+   results = collection.query(
+       zvec.VectorQuery("embedding", vector=query_vector),
+       topk=100  # Increased from 10
+   )
+   
+   # Or adjust HNSW ef_search
+   params = zvec.HnswQueryParams(ef_search=100)
+   results = collection.query(
+       zvec.VectorQuery("embedding", vector=query_vector, params=params),
+       topk=10
+   )
+   ```
+
+5. **Check filters aren't too restrictive**:
+   ```python
+   # Remove or relax filters temporarily
+   results = collection.query(
+       zvec.VectorQuery("embedding", vector=query_vector),
+       # filter="category == 'test'",  # Comment out temporarily
+       topk=10
+   )
+   ```
+
+---
+
+### Memory Errors
+
+**Problem**: `MemoryError`, `std::bad_alloc`, or process killed (OOM)
+
+**Solutions**:
+
+1. **Check memory usage**:
+   ```bash
+   # Monitor memory while running
+   htop  # or top
+   ```
+
+2. **Reduce batch size**:
+   ```python
+   # Instead of inserting 100K docs at once
+   batch_size = 1000
+   for i in range(0, len(docs), batch_size):
+       collection.insert(docs[i:i+batch_size])
+   ```
+
+3. **Use lower precision vectors**:
+   ```python
+   # Use FP16 instead of FP32 to halve memory usage
+   schema = zvec.CollectionSchema(
+       name="docs",
+       vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP16, 768)
+   )
+   ```
+
+4. **Optimize collection regularly**:
+   ```python
+   # Consolidate segments to reduce memory overhead
+   collection.optimize()
+   ```
+
+5. **Consider IVF index for large datasets**:
+   ```python
+   # IVF uses less memory than HNSW
+   from zvec import IVFIndexParams, MetricType
+   
+   schema = zvec.CollectionSchema(
+       name="large_collection",
+       vectors=zvec.VectorSchema(
+           "embedding",
+           zvec.DataType.VECTOR_FP32,
+           768,
+           index_params=IVFIndexParams(metric_type=MetricType.L2)
+       )
+   )
+   ```
+
+<Note>
+  Memory requirements: roughly `N × D × bytes_per_element × 1.2` where N = vector count, D = dimension.
+</Note>
+
+---
+
+### File Lock or Corruption Errors
+
+**Problem**: `Failed to open collection`, `Lock file exists`, or `Corrupted data`
+
+**Solutions**:
+
+1. **Check for running processes**:
+   ```bash
+   # Find processes using the collection
+   lsof /path/to/collection
+   ```
+
+2. **Close collection properly**:
+   ```python
+   # Always close or use context manager
+   collection.close()
+   
+   # Or use with statement
+   with zvec.open("./data") as collection:
+       # Operations here
+       pass
+   # Automatically closed
+   ```
+
+3. **Remove stale lock files** (if no process is running):
+   ```bash
+   rm /path/to/collection/*.lock
+   ```
+
+4. **Restore from backup**:
+   ```bash
+   # If data is corrupted, restore from backup
+   rm -rf ./corrupted_collection
+   cp -r ./backup/collection ./recovered_collection
+   ```
+
+<Warning>
+  Only remove lock files if you're certain no other process is using the collection.
+</Warning>
+
+---
+
+## Performance Issues
+
+### Slow Query Performance
+
+**Problem**: Queries taking too long
+
+**Solutions**:
+
+1. **Optimize the collection**:
+   ```python
+   # Consolidate segments after bulk inserts
+   collection.optimize()
+   ```
+
+2. **Tune HNSW ef_search** (recall vs. speed tradeoff):
+   ```python
+   # Lower ef_search = faster but lower recall
+   params = zvec.HnswQueryParams(ef_search=50)  # Default is often 100+
+   
+   results = collection.query(
+       zvec.VectorQuery("embedding", vector=query_vector, params=params),
+       topk=10
+   )
+   ```
+
+3. **Check index parameters** (set during schema creation):
+   ```python
+   # For faster queries, reduce M or increase ef_construction
+   from zvec import HnswIndexParams, MetricType
+   
+   index_params = HnswIndexParams(
+       metric_type=MetricType.IP,
+       m=16,  # Reduce from default 32 for faster queries
+       ef_construction=200
+   )
+   ```
+
+4. **Use appropriate metric type**:
+   ```python
+   # IP (Inner Product) is fastest for normalized vectors
+   # Normalize vectors before insertion:
+   import numpy as np
+   
+   def normalize(v):
+       return (np.array(v) / np.linalg.norm(v)).tolist()
+   ```
+
+5. **Profile query patterns**:
+   ```python
+   import time
+   
+   start = time.time()
+   results = collection.query(...)
+   print(f"Query took {time.time() - start:.3f}s")
+   ```
+
+---
+
+### Slow Insert Performance
+
+**Problem**: Insertions taking too long
+
+**Solutions**:
+
+1. **Use batch inserts**:
+   ```python
+   # Bad: Insert one at a time
+   for doc in docs:
+       collection.insert([doc])  # Slow
+   
+   # Good: Batch insert
+   collection.insert(docs)  # Much faster
+   ```
+
+2. **Optimize less frequently**:
+   ```python
+   # Don't optimize after every insert
+   # Instead, optimize periodically
+   batch_count = 0
+   for batch in data_batches:
+       collection.insert(batch)
+       batch_count += 1
+       if batch_count % 10 == 0:  # Every 10 batches
+           collection.optimize()
+   ```
+
+3. **Adjust index construction parameters**:
+   ```python
+   # Lower ef_construction for faster indexing (but lower recall)
+   index_params = HnswIndexParams(
+       metric_type=MetricType.IP,
+       m=16,
+       ef_construction=100  # Lower = faster inserts
+   )
+   ```
+
+4. **Consider using Flat index initially**:
+   ```python
+   # Build with Flat index, then convert to HNSW
+   from zvec import FlatIndexParams
+   
+   # Start with Flat for fast ingestion
+   schema = zvec.CollectionSchema(
+       name="temp",
+       vectors=zvec.VectorSchema(
+           "embedding",
+           zvec.DataType.VECTOR_FP32,
+           768,
+           index_params=FlatIndexParams()
+       )
+   )
+   ```
+
+---
+
+### High Memory Usage
+
+**Problem**: Process using too much memory
+
+**Solutions**:
+
+1. **Switch to lower precision**:
+   ```python
+   # Use FP16 instead of FP32 (half the memory)
+   zvec.DataType.VECTOR_FP16
+   
+   # Or use quantized INT8 (1/4 the memory)
+   zvec.DataType.VECTOR_INT8
+   ```
+
+2. **Use IVF instead of HNSW**:
+   ```python
+   from zvec import IVFIndexParams
+   
+   # IVF uses significantly less memory
+   index_params = IVFIndexParams(
+       metric_type=MetricType.L2,
+       nlist=100  # Number of clusters
+   )
+   ```
+
+3. **Enable memory-mapped storage**:
+   ```python
+   # Let OS manage memory
+   collection_options = zvec.CollectionOptions(
+       use_mmap=True  # Use memory-mapped files
+   )
+   ```
+
+4. **Reduce HNSW M parameter**:
+   ```python
+   # Lower M = less memory, but slower queries
+   index_params = HnswIndexParams(
+       metric_type=MetricType.IP,
+       m=8  # Default is often 16-32
+   )
+   ```
+
+---
+
+## Debugging Tips
+
+### Enable Verbose Logging
+
+```python
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("zvec")
+logger.setLevel(logging.DEBUG)
+```
+
+### Check Collection Stats
+
+```python
+stats = collection.stats()
+print(f"Documents: {stats.doc_count}")
+print(f"Segments: {stats.segment_count}")
+print(f"Index type: {stats.index_type}")
+```
+
+### Validate Schema
+
+```python
+# Print schema to verify
+print(schema)
+print(f"Vector dimension: {schema.vectors[0].dimension}")
+print(f"Fields: {[f.name for f in schema.fields]}")
+```
+
+### Test with Minimal Example
+
+```python
+import zvec
+
+# Minimal test to isolate issues
+schema = zvec.CollectionSchema(
+    name="test",
+    vectors=zvec.VectorSchema("vec", zvec.DataType.VECTOR_FP32, 4),
+)
+
+coll = zvec.create_and_open("./test_db", schema)
+coll.insert([zvec.Doc(id="1", vectors={"vec": [0.1, 0.2, 0.3, 0.4]})])
+results = coll.query(zvec.VectorQuery("vec", vector=[0.1, 0.2, 0.3, 0.4]), topk=1)
+print(results)
+coll.close()
+```
+
+---
+
+## Getting Help
+
+If you're still experiencing issues:
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/alibaba/zvec/issues">
+    Report bugs and get help from maintainers
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/rKddFBBu9z">
+    Get real-time help from the community
+  </Card>
+</CardGroup>
+
+### When Reporting Issues
+
+Please include:
+
+1. **Zvec version**: `pip show zvec`
+2. **Python version**: `python --version`
+3. **Operating system**: `uname -a`
+4. **Minimal reproducible example**
+5. **Error messages** (full stack trace)
+6. **Steps you've already tried**
+
+<Tip>
+  The more details you provide, the faster we can help resolve your issue!
+</Tip>

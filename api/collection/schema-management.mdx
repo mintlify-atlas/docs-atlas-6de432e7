@@ -1,0 +1,477 @@
+---
+title: "Schema Management"
+description: "Manage indices, columns, and collection optimization"
+---
+
+## create_index()
+
+Create an index on a vector or scalar field to accelerate queries.
+
+### Signature
+
+```python
+def create_index(
+    self,
+    field_name: str,
+    index_param: Union[HnswIndexParam, IVFIndexParam, FlatIndexParam, InvertIndexParam],
+    option: IndexOption = IndexOption(),
+) -> None
+```
+
+### Parameters
+
+<ParamField path="field_name" type="str" required>
+  Name of the field to index. Must exist in the collection schema.
+</ParamField>
+
+<ParamField path="index_param" type="Union[HnswIndexParam, IVFIndexParam, FlatIndexParam, InvertIndexParam]" required>
+  Index configuration:
+  
+  **Vector indices** (for vector fields):
+  - `HnswIndexParam`: HNSW graph-based index (recommended for most use cases)
+  - `IVFIndexParam`: Inverted file index (good for large datasets)
+  - `FlatIndexParam`: Brute-force search (exact results, no indexing overhead)
+  
+  **Scalar indices** (for non-vector fields):
+  - `InvertIndexParam`: Inverted index for fast filtering on scalar fields
+</ParamField>
+
+<ParamField path="option" type="IndexOption" default="IndexOption()">
+  Additional index creation options (e.g., build parallelism).
+</ParamField>
+
+### Returns
+
+This method does not return a value. It raises an exception if index creation fails.
+
+### Vector Index Example
+
+```python
+from zvec import HnswIndexParam, IVFIndexParam, MetricType
+
+# Create HNSW index (recommended)
+collection.create_index(
+    field_name="embedding",
+    index_param=HnswIndexParam(
+        m=16,                    # Max connections per node
+        ef_construction=200,     # Build-time search depth
+        metric=MetricType.L2     # Distance metric
+    )
+)
+
+# Create IVF index for very large datasets
+collection.create_index(
+    field_name="sparse_embedding",
+    index_param=IVFIndexParam(
+        nlist=1024,              # Number of clusters
+        metric=MetricType.IP     # Inner product
+    )
+)
+```
+
+### Scalar Index Example
+
+```python
+from zvec import InvertIndexParam
+
+# Create inverted index for fast filtering
+collection.create_index(
+    field_name="category",
+    index_param=InvertIndexParam()
+)
+
+# Now queries with filters on "category" will be much faster
+results = collection.query(
+    vectors=query,
+    filter="category == 'technology'",  # Uses the index
+    topk=10
+)
+```
+
+<Note>
+  **Vector indices can only be applied to vector fields**, and **inverted indices only to scalar fields**. Attempting to create a vector index on a scalar field (or vice versa) will raise a `ValueError`.
+</Note>
+
+## drop_index()
+
+Remove an index from a field. This does not delete the field itself, only its index.
+
+### Signature
+
+```python
+def drop_index(self, field_name: str) -> None
+```
+
+### Parameters
+
+<ParamField path="field_name" type="str" required>
+  Name of the indexed field.
+</ParamField>
+
+### Example
+
+```python
+# Drop index (queries will still work, but slower)
+collection.drop_index("embedding")
+
+# Recreate with different parameters
+collection.create_index(
+    "embedding",
+    HnswIndexParam(m=32, ef_construction=400)  # Higher quality
+)
+```
+
+## optimize()
+
+Optimize the collection by merging segments, rebuilding indices, and reclaiming space.
+
+### Signature
+
+```python
+def optimize(self, option: OptimizeOption = OptimizeOption()) -> None
+```
+
+### Parameters
+
+<ParamField path="option" type="OptimizeOption" default="OptimizeOption()">
+  Optimization options controlling the optimization process.
+</ParamField>
+
+### Returns
+
+This method does not return a value.
+
+### Example
+
+```python
+from zvec import OptimizeOption
+
+# Optimize collection
+collection.optimize(OptimizeOption())
+
+# Flush to disk
+collection.flush()
+```
+
+### When to Optimize
+
+Run `optimize()` after:
+
+<Steps>
+  <Step title="Large insertions">
+    After inserting many documents (e.g., 10K+ documents), optimize to merge segments and improve query performance.
+  </Step>
+  <Step title="Large deletions">
+    After deleting many documents, optimize to reclaim disk space.
+  </Step>
+  <Step title="Bulk updates">
+    After updating vectors in bulk, optimize to rebuild indices for better search quality.
+  </Step>
+  <Step title="Schema changes">
+    After adding/dropping columns or indices, optimize to ensure efficient storage.
+  </Step>
+</Steps>
+
+```python
+# After bulk insert
+collection.insert(large_batch)
+collection.optimize()
+
+# After bulk delete
+collection.delete_by_filter("created_year < 2020")
+collection.optimize()  # Reclaim space
+```
+
+## add_column()
+
+Add a new column to the collection schema. Optionally populate it using an expression.
+
+### Signature
+
+```python
+def add_column(
+    self,
+    field_schema: FieldSchema,
+    expression: str = "",
+    option: AddColumnOption = AddColumnOption(),
+) -> None
+```
+
+### Parameters
+
+<ParamField path="field_schema" type="FieldSchema" required>
+  Schema definition for the new column (name, type, nullability).
+</ParamField>
+
+<ParamField path="expression" type="str" default="''">
+  SQL-like expression to compute initial values for existing documents.
+  
+  If empty, the new field will be `NULL` for existing documents (if nullable) or raise an error (if not nullable).
+</ParamField>
+
+<ParamField path="option" type="AddColumnOption" default="AddColumnOption()">
+  Options for the column addition operation.
+</ParamField>
+
+### Returns
+
+This method does not return a value.
+
+### Example
+
+```python
+from zvec import FieldSchema, DataType
+
+# Add a nullable column
+collection.add_column(
+    field_schema=FieldSchema(
+        name="view_count",
+        data_type=DataType.INT64,
+        nullable=True
+    )
+)
+
+# Add a non-nullable column with default value
+collection.add_column(
+    field_schema=FieldSchema(
+        name="is_published",
+        data_type=DataType.BOOL,
+        nullable=False
+    ),
+    expression="false"  # Default all existing docs to false
+)
+```
+
+## drop_column()
+
+Remove a column from the collection schema.
+
+### Signature
+
+```python
+def drop_column(self, field_name: str) -> None
+```
+
+### Parameters
+
+<ParamField path="field_name" type="str" required>
+  Name of the column to drop.
+</ParamField>
+
+### Example
+
+```python
+# Drop a column
+collection.drop_column("deprecated_field")
+```
+
+<Warning>
+  Dropping a column is **irreversible**. All data in that column will be permanently deleted.
+</Warning>
+
+## alter_column()
+
+Rename a column or modify its schema. This operation **only supports scalar numeric columns**.
+
+### Signature
+
+```python
+def alter_column(
+    self,
+    old_name: str,
+    new_name: Optional[str] = None,
+    field_schema: Optional[FieldSchema] = None,
+    option: AlterColumnOption = AlterColumnOption(),
+) -> None
+```
+
+### Parameters
+
+<ParamField path="old_name" type="str" required>
+  Current name of the column to alter.
+</ParamField>
+
+<ParamField path="new_name" type="str" optional>
+  New name for the column. If `None` or empty, no renaming occurs.
+</ParamField>
+
+<ParamField path="field_schema" type="FieldSchema" optional>
+  New schema definition. If `None`, only renaming is performed.
+</ParamField>
+
+<ParamField path="option" type="AlterColumnOption" default="AlterColumnOption()">
+  Options controlling the alteration behavior.
+</ParamField>
+
+### Supported Data Types
+
+<Warning>
+  `alter_column()` **only supports scalar numeric columns**:
+  - `DOUBLE`, `FLOAT`
+  - `INT32`, `INT64`, `UINT32`, `UINT64`
+  
+  You **cannot** alter:
+  - Vector fields
+  - String fields
+  - Boolean fields
+  - Array fields
+</Warning>
+
+### Example: Rename Column
+
+```python
+# Rename a column
+collection.alter_column(
+    old_name="doc_id",
+    new_name="document_id"
+)
+```
+
+### Example: Modify Schema
+
+```python
+from zvec import FieldSchema, DataType
+
+# Change column type (e.g., INT32 -> INT64)
+collection.alter_column(
+    old_name="view_count",
+    field_schema=FieldSchema(
+        name="view_count",
+        data_type=DataType.INT64,  # Upgraded from INT32
+        nullable=False
+    )
+)
+```
+
+<Note>
+  Schema modification may trigger data migration or index rebuilds, which can be time-consuming for large collections.
+</Note>
+
+## get_stats()
+
+Retrieve runtime statistics about the collection.
+
+### Signature
+
+```python
+@property
+def stats(self) -> CollectionStats
+```
+
+### Returns
+
+<ResponseField name="stats" type="CollectionStats">
+  A `CollectionStats` object containing:
+  - `doc_count`: Number of documents in the collection
+  - `disk_size`: Total size on disk (in bytes)
+  - Other internal metrics
+</ResponseField>
+
+### Example
+
+```python
+stats = collection.stats
+print(f"Documents: {stats.doc_count}")
+print(f"Disk size: {stats.disk_size / 1024 / 1024:.2f} MB")
+```
+
+## flush()
+
+Force all pending writes to disk to ensure durability.
+
+### Signature
+
+```python
+def flush(self) -> None
+```
+
+### Example
+
+```python
+# After large batch operations
+collection.insert(large_batch)
+collection.flush()  # Ensure data is persisted
+```
+
+<Tip>
+  Call `flush()` periodically during large batch operations to prevent memory buildup and ensure data durability.
+</Tip>
+
+## destroy()
+
+Permanently delete the collection from disk.
+
+### Signature
+
+```python
+def destroy(self) -> None
+```
+
+### Example
+
+```python
+# Delete the collection
+collection.destroy()
+```
+
+<Warning>
+  This operation is **irreversible**. All data, indices, and metadata will be permanently lost.
+</Warning>
+
+## Best Practices
+
+### Index Strategy
+
+<Steps>
+  <Step title="Start with HNSW">
+    Use `HnswIndexParam` for most vector fields. It provides excellent performance for datasets up to tens of millions of vectors.
+  </Step>
+  <Step title="Use IVF for very large datasets">
+    Switch to `IVFIndexParam` if you have 100M+ vectors and memory is constrained.
+  </Step>
+  <Step title="Index filtered fields">
+    Create `InvertIndexParam` on scalar fields frequently used in `filter` expressions.
+  </Step>
+</Steps>
+
+### Optimization Schedule
+
+```python
+# Optimize after every 100K inserts
+for i, batch in enumerate(data_batches):
+    collection.insert(batch)
+    
+    if (i + 1) % 100 == 0:  # Every 100 batches
+        collection.optimize()
+        collection.flush()
+```
+
+### Schema Evolution
+
+```python
+# 1. Add new column
+collection.add_column(
+    FieldSchema("new_field", DataType.INT64, nullable=True)
+)
+
+# 2. Populate it (if needed)
+for doc_id in all_doc_ids:
+    collection.update(Doc(id=doc_id, fields={"new_field": compute_value(doc_id)}))
+
+# 3. Make it non-nullable (if desired)
+collection.alter_column(
+    "new_field",
+    field_schema=FieldSchema("new_field", DataType.INT64, nullable=False)
+)
+
+# 4. Optimize
+collection.optimize()
+```
+
+## See Also
+
+- [HNSW Index Parameters](/api/index/hnsw)
+- [IVF Index Parameters](/api/index/ivf)
+- [Inverted Index Parameters](/api/index/inverted)
+- [FieldSchema](/api/schema/field-schema)
+- [CollectionSchema](/api/schema/collection-schema)

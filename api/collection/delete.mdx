@@ -1,0 +1,315 @@
+---
+title: "Delete Operations"
+description: "Remove documents from your Zvec collection"
+---
+
+## delete()
+
+Delete documents by ID. This operation permanently removes documents from the collection.
+
+### Signature
+
+```python
+def delete(self, ids: Union[str, list[str]]) -> Union[Status, list[Status]]
+```
+
+### Parameters
+
+<ParamField path="ids" type="Union[str, list[str]]" required>
+  One or more document IDs to delete.
+</ParamField>
+
+### Returns
+
+<ResponseField name="Status" type="Union[Status, list[Status]]">
+  - If a single ID is provided: returns a single `Status` object
+  - If a list is provided: returns a `list[Status]` with one status per ID
+  
+  Each `Status` indicates success or failure for that deletion.
+</ResponseField>
+
+### Basic Example
+
+```python
+import zvec
+
+# Delete a single document
+status = collection.delete("doc_123")
+if status.ok():
+    print("Document deleted successfully")
+else:
+    print(f"Delete failed: {status.message()}")
+```
+
+### Batch Deletion
+
+Delete multiple documents efficiently:
+
+```python
+# Delete multiple documents by ID
+ids_to_delete = ["doc_1", "doc_2", "doc_3", "doc_4", "doc_5"]
+statuses = collection.delete(ids_to_delete)
+
+# Check results
+success_count = sum(1 for s in statuses if s.ok())
+print(f"Successfully deleted {success_count}/{len(ids_to_delete)} documents")
+```
+
+### Delete from Query Results
+
+Delete documents found by a query:
+
+```python
+from zvec import VectorQuery
+
+# Find similar documents
+results = collection.query(
+    vectors=VectorQuery("embedding", id="doc_spam"),
+    topk=100,
+    filter="category == 'spam'"
+)
+
+# Delete them
+ids_to_delete = [doc.id for doc in results]
+statuses = collection.delete(ids_to_delete)
+```
+
+## delete_by_filter()
+
+Delete all documents matching a filter expression. This is more efficient than fetching IDs and calling `delete()` for large-scale deletions.
+
+### Signature
+
+```python
+def delete_by_filter(self, filter: str) -> None
+```
+
+### Parameters
+
+<ParamField path="filter" type="str" required>
+  Boolean expression defining which documents to delete.
+  
+  Examples:
+  - `"status == 'archived'"`
+  - `"created_date < '2023-01-01'"`
+  - `"category IN ['spam', 'test'] AND verified == false"`
+</ParamField>
+
+### Returns
+
+This method does not return a value. It raises an exception if the operation fails.
+
+### Example
+
+```python
+# Delete all documents in a category
+collection.delete_by_filter("category == 'spam'")
+
+# Delete old documents
+collection.delete_by_filter("created_timestamp < 1640995200")
+
+# Complex filter
+collection.delete_by_filter(
+    "(status == 'draft' OR status == 'archived') AND views < 10"
+)
+```
+
+<Warning>
+  `delete_by_filter()` is **irreversible** and can delete many documents at once. Test your filter expression carefully:
+  
+  ```python
+  # Test filter by querying first
+  results = collection.query(
+      vectors=VectorQuery("embedding", vector=[0] * 128),
+      topk=10,
+      filter="status == 'draft'"
+  )
+  print(f"Filter matches {len(results)} documents")
+  
+  # If satisfied, proceed with deletion
+  collection.delete_by_filter("status == 'draft'")
+  ```
+</Warning>
+
+## Error Handling
+
+### Common Delete Errors
+
+```python
+from zvec import StatusCode
+
+status = collection.delete("doc_123")
+
+if not status.ok():
+    if status.code() == StatusCode.NOT_FOUND:
+        print("Document does not exist (may already be deleted)")
+    else:
+        print(f"Error: {status.message()}")
+```
+
+<Note>
+  Deleting a non-existent document typically returns a `NOT_FOUND` status, but this is **not an error** in most use cases. The end result (document doesn't exist) is the same.
+</Note>
+
+### Handling Batch Delete Failures
+
+```python
+ids = ["doc_1", "doc_2", "doc_3"]
+statuses = collection.delete(ids)
+
+# Find which deletions failed
+failed = [
+    (doc_id, status) for doc_id, status in zip(ids, statuses) if not status.ok()
+]
+
+if failed:
+    print(f"{len(failed)} deletions failed:")
+    for doc_id, status in failed:
+        print(f"  ID {doc_id}: {status.message()}")
+```
+
+## Reclaiming Space
+
+Deleted documents don't immediately free up disk space. To reclaim storage:
+
+```python
+# Delete documents
+collection.delete_by_filter("category == 'spam'")
+
+# Optimize to compact segments and free space
+from zvec import OptimizeOption
+
+collection.optimize(OptimizeOption())
+collection.flush()
+```
+
+<Tip>
+  Run `optimize()` periodically after large deletions to:
+  - Reclaim disk space
+  - Improve query performance
+  - Reduce memory usage
+</Tip>
+
+## Performance Tips
+
+### Use delete_by_filter() for Bulk Deletions
+
+```python
+# Good: Direct filter-based deletion
+collection.delete_by_filter("status == 'archived'")
+
+# Bad: Fetch IDs then delete
+results = collection.query(
+    vectors=VectorQuery("embedding", vector=[0] * 128),
+    topk=10000,
+    filter="status == 'archived'"
+)
+ids = [doc.id for doc in results]
+collection.delete(ids)
+```
+
+### Batch Delete Operations
+
+```python
+# Good: Delete in a single batch
+ids = get_ids_to_delete()  # Returns 10,000 IDs
+collection.delete(ids)
+
+# Bad: Individual deletions
+for doc_id in ids:
+    collection.delete(doc_id)
+```
+
+### Optimize After Large Deletions
+
+```python
+# Delete 50% of documents
+collection.delete_by_filter("created_year < 2020")
+
+# Optimize to reclaim space and rebuild indices
+collection.optimize()
+```
+
+## Deletion Strategies
+
+### Soft Delete Pattern
+
+Instead of permanently deleting, mark documents as deleted:
+
+```python
+from zvec import Doc
+
+# Add a "deleted" field to your schema
+schema = zvec.CollectionSchema(
+    name="articles",
+    fields=[
+        zvec.FieldSchema("deleted", zvec.DataType.BOOL, nullable=False),
+        # ... other fields
+    ]
+)
+
+# Soft delete: mark as deleted
+collection.update(Doc(id="doc_123", fields={"deleted": True}))
+
+# Query excludes deleted documents
+results = collection.query(
+    vectors=query,
+    filter="deleted == false",
+    topk=10
+)
+
+# Permanently delete later
+collection.delete_by_filter("deleted == true AND deleted_date < '2024-01-01'")
+```
+
+### Archival Pattern
+
+Move old documents to an archive collection before deletion:
+
+```python
+import zvec
+
+# Query old documents
+old_docs = collection.query(
+    vectors=VectorQuery("embedding", vector=[0] * 128),
+    topk=10000,
+    filter="created_year < 2020",
+    include_vector=True
+)
+
+# Move to archive
+archive = zvec.open("./archive_collection")
+archive.insert(old_docs)
+
+# Delete from main collection
+ids = [doc.id for doc in old_docs]
+collection.delete(ids)
+```
+
+## Atomic Guarantees
+
+<Warning>
+  **Single document deletions** are atomic, but **batch deletions** are not transactional:
+  
+  - If you delete `["doc_1", "doc_2", "doc_3"]` and it fails on `doc_2`, then `doc_1` may be deleted while `doc_3` remains.
+  - Always check the returned `Status` list to verify which deletions succeeded.
+</Warning>
+
+```python
+ids = ["doc_1", "doc_2", "doc_3"]
+statuses = collection.delete(ids)
+
+# Check which succeeded
+for doc_id, status in zip(ids, statuses):
+    if status.ok():
+        print(f"✓ Deleted {doc_id}")
+    else:
+        print(f"✗ Failed to delete {doc_id}: {status.message()}")
+```
+
+## See Also
+
+- [Update Operations](/api/collection/update)
+- [Query Operations](/api/collection/query)
+- [Status & Error Codes](/api/types/status)
+- [Optimize Collection](/api/collection/schema-management#optimize)

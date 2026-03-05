@@ -1,0 +1,413 @@
+---
+title: "Sentence Transformers"
+description: "Local dense and sparse embeddings using Sentence Transformers"
+---
+
+## Overview
+
+Zvec provides local embedding models that run without API calls using the Sentence Transformers library. These models run on your hardware (CPU/GPU) and work offline after initial download.
+
+**Location**: `python/zvec/extension/sentence_transformer_embedding_function.py`
+
+## Installation
+
+```bash
+pip install sentence-transformers
+
+# For ModelScope (recommended for users in China)
+pip install modelscope
+```
+
+## DefaultLocalDenseEmbedding
+
+Local dense embedding using all-MiniLM-L6-v2 model (or Chinese-optimized alternative).
+
+### Constructor
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding
+
+DefaultLocalDenseEmbedding(
+    model_source: Literal["huggingface", "modelscope"] = "huggingface",
+    device: Optional[str] = None,
+    normalize_embeddings: bool = True,
+    batch_size: int = 32,
+    **kwargs
+)
+```
+
+#### Parameters
+
+<ParamField path="model_source" type="Literal['huggingface', 'modelscope']" default="huggingface">
+  Model source:
+  - `"huggingface"`: Use Hugging Face Hub (default, for international users)
+  - `"modelscope"`: Use ModelScope (recommended for users in China)
+</ParamField>
+
+<ParamField path="device" type="Optional[str]" default="None">
+  Device to run the model on:
+  - `"cpu"`: CPU inference
+  - `"cuda"`: NVIDIA GPU
+  - `"mps"`: Apple Silicon GPU
+  - `None`: Automatic detection
+</ParamField>
+
+<ParamField path="normalize_embeddings" type="bool" default="True">
+  Whether to normalize embeddings to unit length (L2 normalization). Useful for cosine similarity.
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Batch size for encoding.
+</ParamField>
+
+### Properties
+
+- `dimension` (int): Always 384 for both models
+- `model_name` (str): "all-MiniLM-L6-v2" (HF) or "iic/nlp_gte_sentence-embedding_chinese-small" (MS)
+
+### Methods
+
+#### embed()
+
+```python
+def embed(self, input: str) -> DenseVectorType:
+    """Generate dense embedding vector for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed. Maximum length typically 128-512 tokens.
+
+**Returns:**
+- `DenseVectorType`: List of floats representing the embedding vector (384 dimensions).
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty
+- `RuntimeError`: If model inference fails
+
+### Usage Examples
+
+#### Basic Usage (Hugging Face)
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding
+
+emb_func = DefaultLocalDenseEmbedding()
+vector = emb_func.embed("Hello, world!")
+print(len(vector))  # 384
+print(isinstance(vector, list))  # True
+```
+
+#### ModelScope (For Users in China)
+
+```python
+# Recommended for users in China
+emb_func = DefaultLocalDenseEmbedding(model_source="modelscope")
+vector = emb_func.embed("你好，世界！")  # Works well with Chinese
+print(len(vector))  # 384
+```
+
+#### Alternative: Hugging Face Mirror
+
+```python
+import os
+
+# Use HF mirror for users in China
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+emb_func = DefaultLocalDenseEmbedding()  # Uses HF mirror
+vector = emb_func.embed("Hello, world!")
+```
+
+#### GPU Acceleration
+
+```python
+# Use CUDA GPU
+emb_func = DefaultLocalDenseEmbedding(device="cuda")
+vector = emb_func.embed("Machine learning is fascinating")
+
+# Normalized vectors have unit length
+import numpy as np
+print(np.linalg.norm(vector))  # 1.0
+```
+
+#### Semantic Similarity
+
+```python
+import numpy as np
+
+emb_func = DefaultLocalDenseEmbedding()
+
+v1 = emb_func.embed("The cat sits on the mat")
+v2 = emb_func.embed("A feline rests on a rug")
+v3 = emb_func.embed("Python programming")
+
+similarity_high = np.dot(v1, v2)  # Similar sentences
+similarity_low = np.dot(v1, v3)   # Different topics
+
+print(similarity_high > similarity_low)  # True
+```
+
+---
+
+## DefaultLocalSparseEmbedding
+
+Local sparse embedding using SPLADE (SParse Lexical AnD Expansion) model. Generates sparse, interpretable representations ideal for lexical matching and hybrid search.
+
+### Constructor
+
+```python
+from zvec.extension import DefaultLocalSparseEmbedding
+
+DefaultLocalSparseEmbedding(
+    model_source: Literal["huggingface", "modelscope"] = "huggingface",
+    device: Optional[str] = None,
+    encoding_type: Literal["query", "document"] = "query",
+    **kwargs
+)
+```
+
+#### Parameters
+
+<ParamField path="model_source" type="Literal['huggingface', 'modelscope']" default="huggingface">
+  Model source (ModelScope support may vary for SPLADE models).
+</ParamField>
+
+<ParamField path="device" type="Optional[str]" default="None">
+  Device to run the model on (`"cpu"`, `"cuda"`, `"mps"`, or `None`).
+</ParamField>
+
+<ParamField path="encoding_type" type="Literal['query', 'document']" default="query">
+  Encoding type:
+  - `"query"`: Optimize for search queries (default)
+  - `"document"`: Optimize for indexed documents
+</ParamField>
+
+### Properties
+
+- `model_name` (str): "naver/splade-cocondenser-ensembledistil"
+- `model_source` (str): The model source being used
+
+### Methods
+
+#### embed()
+
+```python
+def embed(self, input: str) -> SparseVectorType:
+    """Generate sparse embedding vector for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed.
+
+**Returns:**
+- `SparseVectorType`: Dictionary mapping dimension index to weight. Only non-zero dimensions included. Sorted by indices.
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty
+- `RuntimeError`: If model inference fails
+
+### Cache Management
+
+SPLADE models are cached at class level to save memory when using multiple instances:
+
+```python
+# Clear all cached models
+DefaultLocalSparseEmbedding.clear_cache()
+
+# Get cache information
+info = DefaultLocalSparseEmbedding.get_cache_info()
+print(f"Cached models: {info['cached_models']}")
+
+# Remove specific model from cache
+removed = DefaultLocalSparseEmbedding.remove_from_cache(device="cuda")
+```
+
+### Usage Examples
+
+#### Basic Usage
+
+```python
+from zvec.extension import DefaultLocalSparseEmbedding
+
+# Query embedding
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+query_vec = query_emb.embed("machine learning algorithms")
+
+print(type(query_vec))  # <class 'dict'>
+print(len(query_vec))   # ~150-200 non-zero dimensions
+```
+
+#### Memory-Efficient Dual Encoders
+
+```python
+# Both instances share the same model (~200MB total, not 400MB)
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+doc_emb = DefaultLocalSparseEmbedding(encoding_type="document")
+
+query_vec = query_emb.embed("what causes aging fast")
+doc_vec = doc_emb.embed(
+    "UV-A light causes tanning, skin aging, and cataracts..."
+)
+```
+
+#### Asymmetric Retrieval
+
+```python
+query_emb = DefaultLocalSparseEmbedding(encoding_type="query")
+doc_emb = DefaultLocalSparseEmbedding(encoding_type="document")
+
+query_vec = query_emb.embed("machine learning")
+doc_vec = doc_emb.embed("Machine learning is a subset of AI")
+
+# Calculate similarity (dot product)
+similarity = sum(
+    query_vec.get(k, 0) * doc_vec.get(k, 0)
+    for k in set(query_vec) | set(doc_vec)
+)
+print(f"Similarity: {similarity}")
+```
+
+#### Inspecting Sparse Dimensions
+
+```python
+query_vec = query_emb.embed("machine learning")
+
+# Sorted by indices
+print(list(query_vec.items())[:5])
+# [(10, 0.45), (23, 0.87), (56, 0.32), (89, 1.12), (120, 0.65)]
+
+# Sort by weight to find top terms
+top_terms = sorted(query_vec.items(), key=lambda x: x[1], reverse=True)[:5]
+for idx, weight in top_terms:
+    print(f"Dimension {idx}: {weight:.3f}")
+# Dimension 1023: 1.450
+# Dimension 245: 1.230
+# Dimension 8901: 0.980
+```
+
+---
+
+## Hybrid Retrieval
+
+Combine dense and sparse embeddings for optimal search:
+
+```python
+from zvec.extension import (
+    DefaultLocalDenseEmbedding,
+    DefaultLocalSparseEmbedding
+)
+
+# Dense for semantic similarity
+dense_emb = DefaultLocalDenseEmbedding()
+
+# Sparse for lexical matching
+sparse_emb = DefaultLocalSparseEmbedding()
+
+query = "deep learning neural networks"
+
+# Get both embeddings
+dense_vec = dense_emb.embed(query)   # [0.1, -0.3, 0.5, ...]
+sparse_vec = sparse_emb.embed(query)  # {12: 0.8, 45: 1.2, ...}
+
+# Combine scores for hybrid retrieval
+# final_score = α * dense_score + (1-α) * sparse_score
+```
+
+## Model Information
+
+### Dense Model (all-MiniLM-L6-v2)
+
+- **Dimensions**: 384
+- **Model Size**: ~50-80MB
+- **Speed**: ~1000 sentences/sec (CPU), ~10000 (GPU)
+- **Cache**: `~/.cache/torch/sentence_transformers/`
+- **Best For**: General-purpose semantic similarity
+
+### Dense Model (ModelScope Chinese)
+
+- **Model**: iic/nlp_gte_sentence-embedding_chinese-small
+- **Dimensions**: 384
+- **Cache**: `~/.cache/modelscope/hub/`
+- **Best For**: Chinese text processing
+
+### Sparse Model (SPLADE)
+
+- **Model**: naver/splade-cocondenser-ensembledistil
+- **Dimensions**: ~30,000 (vocabulary size)
+- **Non-zero values**: ~100-200 per text
+- **Model Size**: ~100MB
+- **Best For**: Lexical matching, hybrid search
+
+## Best Practices
+
+<Tip>
+**First Download**: On first run, models are downloaded automatically. Ensure you have:
+- Stable internet connection
+- ~200MB free disk space
+- Write permissions to cache directory
+</Tip>
+
+<Info>
+**For Users in China**: Use ModelScope or HF mirror to avoid connection issues:
+
+```python
+# Option 1: ModelScope
+emb = DefaultLocalDenseEmbedding(model_source="modelscope")
+
+# Option 2: HF Mirror
+import os
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+emb = DefaultLocalDenseEmbedding()
+```
+</Info>
+
+<Warning>
+**GPU Memory**: Dense models require ~200MB GPU memory, sparse models ~300MB. Monitor GPU usage when using CUDA.
+</Warning>
+
+## Comparison
+
+| Feature | Dense (all-MiniLM) | Sparse (SPLADE) |
+|---------|-------------------|------------------|
+| **Output Format** | List (384 floats) | Dict (~150 non-zero) |
+| **Model Size** | ~80MB | ~100MB |
+| **Inference Speed** | Fast | Medium |
+| **Best For** | Semantic similarity | Keyword matching |
+| **Interpretability** | Low | High |
+| **Memory (per vector)** | 1.5KB | 1-2KB |
+
+## Error Handling
+
+```python
+try:
+    vector = emb_func.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Error: Input text cannot be empty or whitespace only
+
+try:
+    vector = emb_func.embed(123)  # Wrong type
+except TypeError as e:
+    print(f"Error: {e}")
+    # Error: Expected 'input' to be str, got int
+```
+
+## Notes
+
+- Requires Python 3.10, 3.11, or 3.12
+- No API keys or authentication required
+- Works offline after initial download
+- First call slower due to model loading
+- GPU provides 5-10x speedup over CPU
+- Models stay in memory for subsequent calls
+
+## See Also
+
+- [DenseEmbeddingFunction](/api/embeddings/dense)
+- [SparseEmbeddingFunction](/api/embeddings/sparse)
+- [OpenAI Embeddings](/api/embeddings/openai)
+- [Qwen Embeddings](/api/embeddings/qwen)
+- [BM25 Embeddings](/api/embeddings/bm25)
+- [Embedding Functions Overview](/api/embeddings/overview)

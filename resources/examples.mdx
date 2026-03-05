@@ -1,0 +1,400 @@
+---
+title: "Examples"
+description: "Code examples and common use cases for Zvec"
+icon: "code"
+---
+
+## Getting Started
+
+Explore practical examples to learn how to use Zvec effectively in your applications.
+
+<Note>
+  All examples in this guide are available in the [GitHub repository](https://github.com/alibaba/zvec/tree/main/examples).
+</Note>
+
+## Quick Example
+
+Here's the simplest way to get started with Zvec:
+
+```python
+import zvec
+
+# Define collection schema
+schema = zvec.CollectionSchema(
+    name="example",
+    vectors=zvec.VectorSchema("embedding", zvec.DataType.VECTOR_FP32, 4),
+)
+
+# Create collection
+collection = zvec.create_and_open(path="./zvec_example", schema=schema)
+
+# Insert documents
+collection.insert([
+    zvec.Doc(id="doc_1", vectors={"embedding": [0.1, 0.2, 0.3, 0.4]}),
+    zvec.Doc(id="doc_2", vectors={"embedding": [0.2, 0.3, 0.4, 0.1]}),
+])
+
+# Search by vector similarity
+results = collection.query(
+    zvec.VectorQuery("embedding", vector=[0.4, 0.3, 0.3, 0.1]),
+    topk=10
+)
+
+print(results)
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Semantic Search" icon="magnifying-glass" href="#semantic-search">
+    Search documents by meaning, not just keywords
+  </Card>
+  <Card title="RAG Pipeline" icon="brain" href="#rag-pipeline">
+    Build retrieval-augmented generation systems
+  </Card>
+  <Card title="Recommendation System" icon="star" href="#recommendation-system">
+    Find similar items based on embeddings
+  </Card>
+  <Card title="Hybrid Search" icon="layer-group" href="#hybrid-search">
+    Combine dense and sparse vectors for better results
+  </Card>
+</CardGroup>
+
+## Semantic Search
+
+Search through documents using semantic similarity:
+
+```python
+import zvec
+from zvec.extension import SentenceTransformerEmbeddingFunction
+
+# Initialize embedding function
+embed_fn = SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2"
+)
+
+# Create schema with appropriate dimensions (384 for this model)
+schema = zvec.CollectionSchema(
+    name="documents",
+    vectors=zvec.VectorSchema(
+        "content", 
+        zvec.DataType.VECTOR_FP32, 
+        384
+    ),
+)
+
+collection = zvec.create_and_open("./search_db", schema)
+
+# Index your documents
+documents = [
+    "Zvec is a fast vector database",
+    "Python is a programming language",
+    "Vector search enables semantic similarity",
+]
+
+for i, doc in enumerate(documents):
+    embedding = embed_fn([doc])[0]
+    collection.insert([
+        zvec.Doc(id=f"doc_{i}", vectors={"content": embedding})
+    ])
+
+# Search with natural language query
+query = "database for vectors"
+query_embedding = embed_fn([query])[0]
+
+results = collection.query(
+    zvec.VectorQuery("content", vector=query_embedding),
+    topk=3
+)
+
+for result in results:
+    print(f"Document {result['id']}: Score {result['score']:.4f}")
+```
+
+## RAG Pipeline
+
+Build a Retrieval-Augmented Generation system:
+
+```python
+import zvec
+from zvec.extension import OpenAIEmbeddingFunction
+import openai
+
+# Initialize embedding function
+embed_fn = OpenAIEmbeddingFunction(
+    api_key="your-api-key",
+    model="text-embedding-3-small"
+)
+
+# Create knowledge base
+schema = zvec.CollectionSchema(
+    name="knowledge_base",
+    vectors=zvec.VectorSchema("text", zvec.DataType.VECTOR_FP32, 1536),
+    fields=[
+        zvec.FieldSchema("content", zvec.DataType.STRING)
+    ]
+)
+
+collection = zvec.create_and_open("./rag_db", schema)
+
+# Index your knowledge base
+knowledge = [
+    "Zvec is an in-process vector database built on Proxima.",
+    "It supports both dense and sparse vectors.",
+    "HNSW is the recommended index for most use cases.",
+]
+
+for i, text in enumerate(knowledge):
+    embedding = embed_fn([text])[0]
+    collection.insert([
+        zvec.Doc(
+            id=f"kb_{i}",
+            vectors={"text": embedding},
+            fields={"content": text}
+        )
+    ])
+
+# RAG query function
+def rag_query(question: str, k: int = 3) -> str:
+    # 1. Retrieve relevant context
+    query_embedding = embed_fn([question])[0]
+    results = collection.query(
+        zvec.VectorQuery("text", vector=query_embedding),
+        topk=k
+    )
+    
+    # 2. Build context from results
+    context = "\n".join([r["content"] for r in results])
+    
+    # 3. Generate answer with LLM
+    prompt = f"""Context: {context}
+    
+    Question: {question}
+    
+    Answer based on the context above:"""
+    
+    response = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    return response.choices[0].message.content
+
+# Use the RAG system
+answer = rag_query("What index type should I use?")
+print(answer)
+```
+
+<Tip>
+  Store document content in metadata fields so you can retrieve both vectors and original text.
+</Tip>
+
+## Recommendation System
+
+Find similar items based on embeddings:
+
+```python
+import zvec
+import numpy as np
+
+# Create schema for item embeddings
+schema = zvec.CollectionSchema(
+    name="products",
+    vectors=zvec.VectorSchema("features", zvec.DataType.VECTOR_FP32, 128),
+    fields=[
+        zvec.FieldSchema("title", zvec.DataType.STRING),
+        zvec.FieldSchema("price", zvec.DataType.FLOAT),
+        zvec.FieldSchema("category", zvec.DataType.STRING),
+    ]
+)
+
+collection = zvec.create_and_open("./products_db", schema)
+
+# Index product embeddings
+products = [
+    {"id": "p1", "title": "Laptop", "price": 999.99, "category": "Electronics"},
+    {"id": "p2", "title": "Mouse", "price": 29.99, "category": "Electronics"},
+    {"id": "p3", "title": "Desk", "price": 299.99, "category": "Furniture"},
+]
+
+for product in products:
+    # Generate feature embedding (in production, use a trained model)
+    embedding = np.random.rand(128).tolist()
+    
+    collection.insert([
+        zvec.Doc(
+            id=product["id"],
+            vectors={"features": embedding},
+            fields={
+                "title": product["title"],
+                "price": product["price"],
+                "category": product["category"],
+            }
+        )
+    ])
+
+# Find similar products
+def recommend_similar(product_id: str, k: int = 5):
+    # Get product embedding
+    product = collection.get(product_id)
+    product_vector = product["features"]
+    
+    # Find similar items
+    results = collection.query(
+        zvec.VectorQuery("features", vector=product_vector),
+        topk=k + 1  # +1 to exclude the query item itself
+    )
+    
+    # Filter out the query item
+    recommendations = [r for r in results if r["id"] != product_id]
+    return recommendations[:k]
+
+# Get recommendations
+similar_products = recommend_similar("p1", k=3)
+for product in similar_products:
+    print(f"{product['title']}: {product['score']:.4f}")
+```
+
+## Hybrid Search
+
+Combine dense and sparse vectors for improved search quality:
+
+```python
+import zvec
+from zvec.extension import SentenceTransformerEmbeddingFunction, BM25EmbeddingFunction
+
+# Create schema with both dense and sparse vectors
+schema = zvec.CollectionSchema(
+    name="hybrid_search",
+    vectors=[
+        zvec.VectorSchema("dense", zvec.DataType.VECTOR_FP32, 384),
+        zvec.VectorSchema("sparse", zvec.DataType.SPARSE_VECTOR_FP32, 0),
+    ],
+    fields=[
+        zvec.FieldSchema("text", zvec.DataType.STRING)
+    ]
+)
+
+collection = zvec.create_and_open("./hybrid_db", schema)
+
+# Initialize embedding functions
+dense_fn = SentenceTransformerEmbeddingFunction("all-MiniLM-L6-v2")
+sparse_fn = BM25EmbeddingFunction()
+
+# Index documents with both embeddings
+documents = [
+    "Vector databases enable semantic search",
+    "Zvec supports hybrid search with dense and sparse vectors",
+    "HNSW provides fast approximate nearest neighbor search",
+]
+
+for i, text in enumerate(documents):
+    dense_emb = dense_fn([text])[0]
+    sparse_emb = sparse_fn([text])[0]
+    
+    collection.insert([
+        zvec.Doc(
+            id=f"doc_{i}",
+            vectors={
+                "dense": dense_emb,
+                "sparse": sparse_emb,
+            },
+            fields={"text": text}
+        )
+    ])
+
+# Hybrid search with both vector types
+query = "fast vector search"
+
+results = collection.query(
+    queries=[
+        zvec.VectorQuery("dense", vector=dense_fn([query])[0]),
+        zvec.VectorQuery("sparse", vector=sparse_fn([query])[0]),
+    ],
+    topk=5
+)
+
+for result in results:
+    print(f"{result['text']}: {result['score']:.4f}")
+```
+
+<Warning>
+  Hybrid search requires careful tuning of weights and normalization for optimal results.
+</Warning>
+
+## C++ Examples
+
+For advanced users, C++ examples are available in the repository:
+
+### Database API Example
+
+Complete example showing collection lifecycle:
+- Location: `examples/c++/db/main.cc`
+- Demonstrates: Schema creation, document insertion, querying, optimization
+
+```cpp
+// Create schema with multiple field types
+auto schema = std::make_shared<CollectionSchema>("demo");
+schema->add_field(std::make_shared<FieldSchema>(
+    "dense", DataType::VECTOR_FP32, 128, false,
+    std::make_shared<HnswIndexParams>(MetricType::IP)
+));
+
+// Create and open collection
+auto result = Collection::CreateAndOpen(path, *schema, options);
+auto coll = std::move(result).value();
+
+// Query vectors
+VectorQuery query;
+query.topk_ = 10;
+query.field_name_ = "dense";
+query.query_vector_.assign((char*)query_vector.data(), 
+                          query_vector.size() * sizeof(float));
+auto res = coll->Query(query);
+```
+
+### Core Index API Example
+
+Lower-level index operations:
+- Location: `examples/c++/core/main.cc`
+- Demonstrates: Direct index creation, training, and search
+
+```cpp
+// Create HNSW index
+auto param = HNSWIndexParamBuilder()
+                 .WithMetricType(MetricType::kInnerProduct)
+                 .WithDataType(DataType::DT_FP32)
+                 .WithDimension(64)
+                 .Build();
+
+auto index = IndexFactory::CreateAndInitIndex(*param);
+index->Open(index_name, StorageOptions{...});
+
+// Add vectors and search
+index->Add(vector_data, id);
+index->Train();
+index->Search(query, query_param, &result);
+```
+
+### Utility Example
+
+Helper utilities:
+- Location: `examples/c++/ailego/main.cc`
+- Demonstrates: String utilities and helper functions
+
+<Tip>
+  Build C++ examples with: `cd examples/c++ && mkdir build && cd build && cmake .. && make`
+</Tip>
+
+## More Examples
+
+Explore additional examples:
+
+- **[Embedding Integrations](/guides/embeddings)** - OpenAI, Qwen, Sentence Transformers
+- **[Performance Tuning](/guides/performance-tuning)** - Optimization strategies
+- **[Advanced Queries](/concepts/querying)** - Complex query patterns
+- **[Schema Design](/concepts/schemas)** - Best practices for schemas
+
+<Note>
+  Have an interesting example? Share it in our [Discord community](https://discord.gg/rKddFBBu9z) or contribute to the repository!
+</Note>

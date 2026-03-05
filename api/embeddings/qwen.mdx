@@ -1,0 +1,364 @@
+---
+title: "Qwen Embeddings"
+description: "Dense and sparse text embeddings using Qwen/DashScope API"
+---
+
+## Overview
+
+Qwen provides both dense and sparse text embedding capabilities using Alibaba Cloud's DashScope service. Both classes support configurable dimensions and automatic result caching.
+
+**Location**: `python/zvec/extension/qwen_embedding_function.py`
+
+## Installation
+
+```bash
+pip install dashscope
+```
+
+## QwenDenseEmbedding
+
+Dense text embedding function using Qwen (DashScope) API.
+
+### Constructor
+
+```python
+from zvec.extension import QwenDenseEmbedding
+
+QwenDenseEmbedding(
+    dimension: int,
+    model: str = "text-embedding-v4",
+    api_key: Optional[str] = None,
+    **kwargs
+)
+```
+
+#### Parameters
+
+<ParamField path="dimension" type="int" required>
+  Desired output embedding dimension. Common values:
+  - `512`: Balanced performance and accuracy
+  - `1024`: Higher accuracy, larger storage
+  - `1536`: Maximum accuracy for supported models
+</ParamField>
+
+<ParamField path="model" type="str" default="text-embedding-v4">
+  DashScope embedding model identifier. Options:
+  - `text-embedding-v4` (recommended)
+  - `text-embedding-v3`
+  - `text-embedding-v2`
+  - `text-embedding-v1`
+</ParamField>
+
+<ParamField path="api_key" type="Optional[str]" default="None">
+  DashScope API authentication key. If `None`, reads from `DASHSCOPE_API_KEY` environment variable. Obtain from: https://dashscope.console.aliyun.com/
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional DashScope API parameters:
+  - `text_type` (str): Specifies text role - `"query"` for search queries or `"document"` for indexed content. Optimizes embeddings for asymmetric search.
+  
+  Reference: https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api
+</ParamField>
+
+### Methods
+
+#### embed()
+
+```python
+@lru_cache(maxsize=10)
+def embed(self, input: TEXT) -> DenseVectorType:
+    """Generate dense embedding vector for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed. Maximum length depends on model (typically 2048-8192 tokens).
+
+**Returns:**
+- `DenseVectorType`: List of floats representing the embedding vector. Length equals `self.dimension`.
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty or API returns error
+- `RuntimeError`: If network or DashScope service errors occur
+
+### Usage Examples
+
+#### Basic Usage
+
+```python
+from zvec.extension import QwenDenseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+emb_func = QwenDenseEmbedding(dimension=1024)
+vector = emb_func.embed("Hello, world!")
+print(len(vector))  # 1024
+```
+
+#### Specific Model
+
+```python
+emb_func = QwenDenseEmbedding(
+    dimension=512,
+    model="text-embedding-v3",
+    api_key="sk-xxxxx"
+)
+
+vector = emb_func.embed("Machine learning is fascinating")
+print(isinstance(vector, list))  # True
+```
+
+#### Asymmetric Retrieval
+
+```python
+# For search queries
+query_emb = QwenDenseEmbedding(
+    dimension=1024,
+    text_type="query"
+)
+query_vector = query_emb.embed("What is machine learning?")
+
+# For document embeddings
+doc_emb = QwenDenseEmbedding(
+    dimension=1024,
+    text_type="document"
+)
+doc_vector = doc_emb.embed(
+    "Machine learning is a subset of artificial intelligence..."
+)
+```
+
+---
+
+## QwenSparseEmbedding
+
+Sparse text embedding function using Qwen (DashScope) API. Generates sparse keyword-weighted vectors suitable for lexical matching and BM25-style retrieval.
+
+### Constructor
+
+```python
+from zvec.extension import QwenSparseEmbedding
+
+QwenSparseEmbedding(
+    dimension: int,
+    model: str = "text-embedding-v4",
+    api_key: Optional[str] = None,
+    **kwargs
+)
+```
+
+#### Parameters
+
+<ParamField path="dimension" type="int" required>
+  Desired output embedding dimension. Common values:
+  - `512`: Balanced performance
+  - `1024`: Higher accuracy
+  - `1536`: Maximum accuracy
+</ParamField>
+
+<ParamField path="model" type="str" default="text-embedding-v4">
+  DashScope embedding model identifier.
+</ParamField>
+
+<ParamField path="api_key" type="Optional[str]" default="None">
+  DashScope API key or None to use environment variable.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional DashScope API parameters:
+  - `encoding_type` (Literal["query", "document"]): Encoding type
+    - `"query"`: Optimize for search queries (default)
+    - `"document"`: Optimize for indexed documents
+</ParamField>
+
+### Methods
+
+#### embed()
+
+```python
+@lru_cache(maxsize=10)
+def embed(self, input: TEXT) -> SparseVectorType:
+    """Generate sparse embedding vector for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed.
+
+**Returns:**
+- `SparseVectorType`: Dictionary mapping dimension index to weight. Only non-zero dimensions included. Sorted by indices for consistency.
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty or API returns error
+- `RuntimeError`: If network or service errors occur
+
+### Usage Examples
+
+#### Basic Usage
+
+```python
+from zvec.extension import QwenSparseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+query_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="query"
+)
+
+query_vec = query_emb.embed("machine learning")
+print(type(query_vec))  # <class 'dict'>
+print(len(query_vec))   # ~150-200 non-zero dimensions
+```
+
+#### Document Embedding
+
+```python
+doc_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="document"
+)
+
+doc_vec = doc_emb.embed("Machine learning is a subset of AI")
+print(isinstance(doc_vec, dict))  # True
+```
+
+#### Asymmetric Retrieval
+
+```python
+# Query encoder
+query_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="query"
+)
+
+# Document encoder
+doc_emb = QwenSparseEmbedding(
+    dimension=1024,
+    encoding_type="document"
+)
+
+query_vec = query_emb.embed("what causes aging fast")
+doc_vec = doc_emb.embed(
+    "UV-A light causes tanning, skin aging, and cataracts..."
+)
+
+# Calculate similarity (dot product)
+similarity = sum(
+    query_vec.get(k, 0) * doc_vec.get(k, 0)
+    for k in set(query_vec) | set(doc_vec)
+)
+print(f"Similarity: {similarity}")
+```
+
+#### Inspecting Sparse Dimensions
+
+```python
+query_vec = query_emb.embed("machine learning")
+
+# Output is sorted by indices
+print(list(query_vec.items())[:5])
+# [(10, 0.45), (23, 0.87), (56, 0.32), (89, 1.12), (120, 0.65)]
+
+# Sort by weight to find top terms
+top_terms = sorted(query_vec.items(), key=lambda x: x[1], reverse=True)[:5]
+for idx, weight in top_terms:
+    print(f"Dimension {idx}: {weight:.3f}")
+```
+
+---
+
+## Hybrid Retrieval
+
+Combine dense and sparse embeddings for optimal search:
+
+```python
+from zvec.extension import QwenDenseEmbedding, QwenSparseEmbedding
+import os
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+# Dense for semantic similarity
+dense_emb = QwenDenseEmbedding(dimension=1024)
+
+# Sparse for lexical matching
+sparse_emb = QwenSparseEmbedding(dimension=1024)
+
+query = "deep learning neural networks"
+
+# Get both embeddings
+dense_vec = dense_emb.embed(query)   # [0.1, -0.3, 0.5, ...]
+sparse_vec = sparse_emb.embed(query)  # {12: 0.8, 45: 1.2, ...}
+
+# Combine scores for hybrid retrieval
+# score = α * dense_score + (1-α) * sparse_score
+```
+
+## Best Practices
+
+<Tip>
+**Environment Variables**: Store API keys securely:
+
+```bash
+export DASHSCOPE_API_KEY="your-api-key"
+```
+
+Then:
+```python
+emb_func = QwenDenseEmbedding(dimension=1024)  # Auto-reads from env
+```
+</Tip>
+
+<Info>
+**Asymmetric Search**: Use `text_type="query"` for queries and `text_type="document"` for documents to optimize retrieval accuracy.
+</Info>
+
+<Warning>
+**API Costs**: DashScope API usage may incur costs. Monitor your usage at https://dashscope.console.aliyun.com/
+</Warning>
+
+## Comparison: Dense vs Sparse
+
+| Feature | QwenDenseEmbedding | QwenSparseEmbedding |
+|---------|-------------------|---------------------|
+| **Output Format** | List of floats | Dictionary (sparse) |
+| **Typical Size** | 512-1536 dimensions (all) | ~150-200 non-zero dimensions |
+| **Best For** | Semantic similarity | Keyword matching |
+| **Memory** | Fixed size | Variable, efficient |
+| **Interpretability** | Low | High (terms visible) |
+| **Use Case** | General retrieval | Lexical search, hybrid |
+
+## Error Handling
+
+```python
+try:
+    vector = emb_func.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Error: Input text cannot be empty or whitespace only
+
+try:
+    vector = emb_func.embed(123)  # Wrong type
+except TypeError as e:
+    print(f"Error: {e}")
+    # Error: Expected 'input' to be str, got int
+```
+
+## Notes
+
+- Requires Python 3.10, 3.11, or 3.12
+- Requires `dashscope` package: `pip install dashscope`
+- Results are cached (LRU cache, maxsize=10)
+- Network connectivity required
+- API costs may apply
+- Sparse vectors are sorted by indices for consistency
+
+## See Also
+
+- [DenseEmbeddingFunction](/api/embeddings/dense)
+- [SparseEmbeddingFunction](/api/embeddings/sparse)
+- [OpenAI Embeddings](/api/embeddings/openai)
+- [Sentence Transformers](/api/embeddings/sentence-transformers)
+- [Embedding Functions Overview](/api/embeddings/overview)

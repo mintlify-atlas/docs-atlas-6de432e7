@@ -1,0 +1,220 @@
+---
+title: "VectorSchema"
+description: "Define vector fields for similarity search"
+---
+
+## Overview
+
+`VectorSchema` defines a vector field in a collection schema. Vector fields are used for similarity search operations and can be configured with different data types, dimensions, and index parameters.
+
+## Constructor
+
+```python
+VectorSchema(
+    name: str,
+    data_type: DataType,
+    dimension: Optional[int] = 0,
+    index_param: Optional[Union[HnswIndexParam, FlatIndexParam, IVFIndexParam]] = None
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="str" required>
+  Name of the vector field. Must be unique within the collection.
+</ParamField>
+
+<ParamField path="data_type" type="DataType" required>
+  Vector data type. Supported types:
+  - `DataType.VECTOR_FP32` - 32-bit floating point (most common)
+  - `DataType.VECTOR_FP16` - 16-bit floating point (memory efficient)
+  - `DataType.VECTOR_FP64` - 64-bit floating point (high precision)
+  - `DataType.VECTOR_INT8` - 8-bit integer (quantized)
+  - `DataType.SPARSE_VECTOR_FP32` - Sparse 32-bit float
+  - `DataType.SPARSE_VECTOR_FP16` - Sparse 16-bit float
+</ParamField>
+
+<ParamField path="dimension" type="int">
+  Dimensionality of the vector. Must be greater than 0 for dense vectors. For sparse vectors, may be `None` or 0. Defaults to 0.
+</ParamField>
+
+<ParamField path="index_param" type="HnswIndexParam | FlatIndexParam | IVFIndexParam">
+  Index configuration for this vector field. Determines the search algorithm and performance characteristics. Defaults to `FlatIndexParam()` if not specified.
+  
+  - `HnswIndexParam` - HNSW graph index (balanced speed/accuracy)
+  - `FlatIndexParam` - Brute-force search (highest accuracy)
+  - `IVFIndexParam` - Inverted file index (large-scale data)
+</ParamField>
+
+### Raises
+
+- **ValueError**: If `dimension` is negative or if `data_type` is not a supported vector type
+- **TypeError**: If `name` is not a string
+
+## Properties
+
+<ResponseField name="name" type="str">
+  The name of the vector field (read-only).
+</ResponseField>
+
+<ResponseField name="data_type" type="DataType">
+  The vector data type (read-only).
+</ResponseField>
+
+<ResponseField name="dimension" type="int">
+  The dimensionality of the vector (read-only).
+</ResponseField>
+
+<ResponseField name="index_param" type="HnswIndexParam | IVFIndexParam | FlatIndexParam">
+  Index configuration for the vector (read-only).
+</ResponseField>
+
+## Examples
+
+### Basic vector field
+
+```python
+from zvec import VectorSchema, DataType
+
+# Create a simple 384-dimensional vector field
+vector = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=384
+)
+
+print(vector.name)       # "embedding"
+print(vector.dimension)  # 384
+```
+
+### Vector with HNSW index
+
+```python
+from zvec import VectorSchema, DataType
+from zvec.model.param import HnswIndexParam
+from zvec.typing import MetricType
+
+# Configure HNSW index for better performance
+vector = VectorSchema(
+    name="text_embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768,
+    index_param=HnswIndexParam(
+        metric_type=MetricType.COSINE,
+        m=16,
+        ef_construction=200
+    )
+)
+
+print(vector.index_param.metric_type)  # MetricType.COSINE
+```
+
+### Memory-efficient vectors
+
+```python
+from zvec import VectorSchema, DataType
+
+# Use FP16 for 50% memory reduction
+vector_fp16 = VectorSchema(
+    name="image_embedding",
+    data_type=DataType.VECTOR_FP16,
+    dimension=512
+)
+
+# Use INT8 for 75% memory reduction (with quantization)
+vector_int8 = VectorSchema(
+    name="quantized_embedding",
+    data_type=DataType.VECTOR_INT8,
+    dimension=128
+)
+```
+
+### Sparse vectors
+
+```python
+from zvec import VectorSchema, DataType
+from zvec.model.param import HnswIndexParam
+
+# Sparse vector for BM25 or TF-IDF embeddings
+sparse_vector = VectorSchema(
+    name="bm25_embedding",
+    data_type=DataType.SPARSE_VECTOR_FP32,
+    index_param=HnswIndexParam()
+)
+
+print(sparse_vector.data_type)  # DataType.SPARSE_VECTOR_FP32
+```
+
+### Multiple vector fields in a schema
+
+```python
+from zvec import CollectionSchema, VectorSchema, DataType
+from zvec.model.param import HnswIndexParam
+from zvec.typing import MetricType
+
+# Multi-modal collection with text and image vectors
+schema = CollectionSchema(
+    name="multi_modal",
+    vectors=[
+        VectorSchema(
+            "text_embedding",
+            DataType.VECTOR_FP32,
+            dimension=384,
+            index_param=HnswIndexParam(metric_type=MetricType.COSINE)
+        ),
+        VectorSchema(
+            "image_embedding",
+            DataType.VECTOR_FP16,
+            dimension=512,
+            index_param=HnswIndexParam(metric_type=MetricType.L2)
+        )
+    ]
+)
+```
+
+### IVF index for large-scale data
+
+```python
+from zvec import VectorSchema, DataType
+from zvec.model.param import IVFIndexParam
+from zvec.typing import MetricType, QuantizeType
+
+# IVF index optimized for millions of vectors
+vector = VectorSchema(
+    name="large_scale_embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=1536,
+    index_param=IVFIndexParam(
+        metric_type=MetricType.IP,
+        n_list=1000,
+        quantize_type=QuantizeType.INT8
+    )
+)
+```
+
+## MetricType Values
+
+The `metric_type` parameter in index configurations determines how vector similarity is calculated:
+
+- **`MetricType.L2`** - Euclidean distance (smaller is more similar)
+- **`MetricType.IP`** - Inner product (larger is more similar)
+- **`MetricType.COSINE`** - Cosine similarity (larger is more similar)
+
+<Tip>
+For normalized vectors, `COSINE` and `IP` produce identical rankings. Use `COSINE` for unnormalized vectors.
+</Tip>
+
+## Index Selection Guide
+
+| Index Type | Best For | Pros | Cons |
+|-----------|----------|------|------|
+| **Flat** | Small datasets (under 10K vectors) | Perfect accuracy | Slow on large data |
+| **HNSW** | Most use cases | Fast, accurate | Memory intensive |
+| **IVF** | Large datasets (over 1M vectors) | Memory efficient | Requires training |
+
+## See Also
+
+- [CollectionSchema](/api/schema/collection-schema) - Define complete collection structure
+- [DataType](/api/schema/data-types) - All available data types
+- [HnswIndexParam](/api/index/hnsw) - HNSW index configuration
+- [IVFIndexParam](/api/index/ivf) - IVF index configuration

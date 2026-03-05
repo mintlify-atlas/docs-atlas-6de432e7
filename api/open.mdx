@@ -1,0 +1,127 @@
+---
+title: 'open'
+description: 'Open an existing collection from disk'
+---
+
+## Function signature
+
+```python
+zvec.open(
+    path: str,
+    option: CollectionOption = CollectionOption()
+) -> Collection
+```
+
+Open an existing collection from disk. The collection must have been previously created with `create_and_open`.
+
+## Parameters
+
+<ParamField path="path" type="string" required>
+  Path or name of the existing collection.
+  
+  Must point to a valid collection that was previously created with `zvec.create_and_open()`.
+</ParamField>
+
+<ParamField path="option" type="CollectionOption" default="CollectionOption()">
+  Configuration options for opening the collection.
+  
+  Defaults to a default-constructed `CollectionOption()` if not provided.
+</ParamField>
+
+## Return value
+
+Returns a `Collection` instance that can be used for querying, inserting, updating, and deleting data.
+
+## Exceptions
+
+- May raise errors if the collection does not exist at the specified path.
+- May raise errors if the collection is corrupted or incompatible with the current Zvec version.
+- May raise errors if the collection is already open by another process (depending on locking behavior).
+
+## Examples
+
+### Open an existing collection
+
+Simple usage with default options:
+
+```python
+import zvec
+
+# Initialize Zvec first
+zvec.init()
+
+# Open existing collection
+coll = zvec.open("./my_collection")
+
+# Use the collection
+results = coll.query(limit=10)
+```
+
+### Open with custom options
+
+Specify collection options when opening:
+
+```python
+import zvec
+from zvec import CollectionOption
+
+zvec.init()
+
+option = CollectionOption()
+
+coll = zvec.open("./my_collection", option)
+```
+
+### Error handling
+
+Handle potential errors when opening a collection:
+
+```python
+import zvec
+
+zvec.init()
+
+try:
+    coll = zvec.open("./my_collection")
+    print("Collection opened successfully")
+except Exception as e:
+    print(f"Failed to open collection: {e}")
+```
+
+### Open multiple collections
+
+Work with multiple collections simultaneously:
+
+```python
+import zvec
+
+zvec.init()
+
+# Open multiple collections
+coll_users = zvec.open("./users")
+coll_posts = zvec.open("./posts")
+coll_comments = zvec.open("./comments")
+
+# Use collections independently
+user_results = coll_users.query(limit=10)
+post_results = coll_posts.query(limit=20)
+```
+
+## Best practices
+
+<Tip>
+  Always call `zvec.init()` before opening collections to ensure proper initialization.
+</Tip>
+
+<Warning>
+  Ensure the collection path exists and points to a valid Zvec collection created with `create_and_open()`.
+</Warning>
+
+<Info>
+  The same collection can be opened multiple times within the same process, but be aware of potential concurrency issues when writing to the collection.
+</Info>
+
+## See also
+
+- [zvec.create_and_open](/api/create-and-open) - Create a new collection
+- [zvec.init](/api/init) - Initialize Zvec configuration

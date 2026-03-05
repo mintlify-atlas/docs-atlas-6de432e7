@@ -1,0 +1,412 @@
+---
+title: QuantizeType
+description: Enumeration of vector quantization types for compression
+---
+
+## Overview
+
+`QuantizeType` defines the quantization methods available for compressing vector embeddings. Quantization reduces memory usage and can improve search speed at the cost of some accuracy.
+
+```python
+import zvec
+
+print(zvec.QuantizeType.INT8)
+# Output: QuantizeType.INT8
+```
+
+## Available Quantization Types
+
+<ParamField path="UNDEFINED" type="QuantizeType">
+  **No quantization**. Vectors are stored in their original precision.
+  
+  **Memory**: 100% (baseline)
+  
+  **Accuracy**: 100%
+  
+  **When to use**: When accuracy is critical and memory is not a constraint.
+  
+  ```python
+  # No quantization specified
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=768
+      # quantize_type not specified = UNDEFINED
+  )
+  ```
+</ParamField>
+
+<ParamField path="FP16" type="QuantizeType">
+  **16-bit floating point quantization**. Reduces precision from 32-bit to 16-bit floats.
+  
+  **Memory**: ~50% of original (half precision)
+  
+  **Accuracy**: ~99.5% (minimal loss for most use cases)
+  
+  **When to use**: General-purpose compression with negligible quality loss.
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=768,
+      quantize_type=QuantizeType.FP16
+  )
+  ```
+</ParamField>
+
+<ParamField path="INT8" type="QuantizeType">
+  **8-bit integer quantization**. Converts floating point values to 8-bit signed integers.
+  
+  **Memory**: ~25% of original (75% reduction)
+  
+  **Accuracy**: ~95-98% (noticeable but acceptable loss)
+  
+  **When to use**: When memory reduction is important and slight accuracy loss is acceptable.
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=1536,
+      quantize_type=QuantizeType.INT8
+  )
+  ```
+</ParamField>
+
+<ParamField path="INT4" type="QuantizeType">
+  **4-bit integer quantization**. Converts floating point values to 4-bit integers.
+  
+  **Memory**: ~12.5% of original (87.5% reduction)
+  
+  **Accuracy**: ~90-95% (significant loss, use with caution)
+  
+  **When to use**: Extreme memory constraints, large-scale deployments, when recall drop is acceptable.
+  
+  ```python
+  field = Field(
+      name="embedding",
+      dtype=DataType.VECTOR_FP32,
+      dim=2048,
+      quantize_type=QuantizeType.INT4
+  )
+  ```
+</ParamField>
+
+## Quantization Properties
+
+All `QuantizeType` enum members have these properties:
+
+<ResponseField name="name" type="str">
+  The name of the quantization type as a string.
+  ```python
+  QuantizeType.INT8.name  # "INT8"
+  ```
+</ResponseField>
+
+<ResponseField name="value" type="int">
+  The internal integer value of the quantization type.
+  ```python
+  QuantizeType.INT8.value  # 2
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Basic Quantization
+
+```python
+from zvec import Collection, Field, DataType, QuantizeType
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    Field(name="title", dtype=DataType.STRING),
+    Field(
+        name="embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        quantize_type=QuantizeType.INT8  # 8-bit quantization
+    )
+]
+
+collection = Collection.create(
+    name="compressed_docs",
+    schema=schema
+)
+```
+
+### Comparing Quantization Levels
+
+```python
+from zvec import QuantizeType
+
+# Memory usage comparison for 1536-dimensional FP32 vector
+base_size = 1536 * 4  # 6,144 bytes
+
+quantization_levels = [
+    (QuantizeType.UNDEFINED, base_size, "100%"),
+    (QuantizeType.FP16, base_size // 2, "50%"),
+    (QuantizeType.INT8, base_size // 4, "25%"),
+    (QuantizeType.INT4, base_size // 8, "12.5%"),
+]
+
+for qtype, size, percent in quantization_levels:
+    print(f"{qtype.name:12} | {size:5} bytes | {percent:6} memory")
+
+# Output:
+# UNDEFINED    |  6144 bytes |   100% memory
+# FP16         |  3072 bytes |    50% memory
+# INT8         |  1536 bytes |    25% memory
+# INT4         |   768 bytes |  12.5% memory
+```
+
+### Multi-Field Schema with Different Quantization
+
+```python
+from zvec import Collection, Field, DataType, QuantizeType, MetricType
+
+schema = [
+    Field(name="id", dtype=DataType.STRING, is_primary=True),
+    
+    # High precision for critical field
+    Field(
+        name="primary_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=768,
+        metric=MetricType.COSINE,
+        quantize_type=QuantizeType.FP16  # Minimal loss
+    ),
+    
+    # Aggressive compression for secondary field
+    Field(
+        name="secondary_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=1536,
+        metric=MetricType.COSINE,
+        quantize_type=QuantizeType.INT8  # More compression
+    ),
+    
+    # Extreme compression for auxiliary field
+    Field(
+        name="auxiliary_embedding",
+        dtype=DataType.VECTOR_FP32,
+        dim=2048,
+        metric=MetricType.L2,
+        quantize_type=QuantizeType.INT4  # Maximum compression
+    )
+]
+
+collection = Collection.create(
+    name="multi_embedding",
+    schema=schema
+)
+```
+
+## Choosing the Right Quantization
+
+### Decision Matrix
+
+<CardGroup cols={2}>
+  <Card title="FP16" icon="compress">
+    **Best balance for most use cases**
+    
+    ✅ 50% memory savings
+    ✅ ~99.5% accuracy retained
+    ✅ Minimal quality loss
+    ✅ Good for production
+    
+    **Use for**: Text embeddings, semantic search, general applications
+  </Card>
+  
+  <Card title="INT8" icon="compress-arrows-alt">
+    **Good compression with acceptable quality**
+    
+    ✅ 75% memory savings
+    ⚠️ ~95-98% accuracy
+    ⚠️ Noticeable but acceptable loss
+    ✅ Faster search
+    
+    **Use for**: Large-scale systems, cost-sensitive deployments, when quality drop is acceptable
+  </Card>
+  
+  <Card title="INT4" icon="database">
+    **Extreme compression for specific needs**
+    
+    ✅ 87.5% memory savings
+    ❌ ~90-95% accuracy
+    ❌ Significant quality loss
+    ✅ Very fast search
+    
+    **Use for**: Massive scale (billions of vectors), memory-critical environments, when recall drop is acceptable
+  </Card>
+  
+  <Card title="UNDEFINED (No Quantization)" icon="star">
+    **Maximum quality, baseline**
+    
+    ✅ 100% accuracy
+    ❌ 100% memory usage
+    ❌ Slower search
+    
+    **Use for**: Critical accuracy requirements, small datasets, benchmarking
+  </Card>
+</CardGroup>
+
+### Quantization Trade-offs
+
+<Tabs>
+  <Tab title="Memory">
+    | Quantization | Memory per 768-dim vector | Savings |
+    |--------------|---------------------------|--------|
+    | UNDEFINED (FP32) | 3,072 bytes | 0% |
+    | FP16 | 1,536 bytes | 50% |
+    | INT8 | 768 bytes | 75% |
+    | INT4 | 384 bytes | 87.5% |
+    
+    For 1 million vectors (768-dim):
+    - **FP32**: ~3 GB
+    - **FP16**: ~1.5 GB
+    - **INT8**: ~768 MB
+    - **INT4**: ~384 MB
+  </Tab>
+  
+  <Tab title="Accuracy">
+    | Quantization | Typical Recall@10 | Quality |
+    |--------------|-------------------|----------|
+    | UNDEFINED | 100% (baseline) | Perfect |
+    | FP16 | ~99.5% | Excellent |
+    | INT8 | ~95-98% | Good |
+    | INT4 | ~90-95% | Acceptable |
+    
+    <Note>
+      Actual accuracy depends on:
+      - Vector distribution
+      - Dimensionality
+      - Distance metric
+      - Query characteristics
+    </Note>
+  </Tab>
+  
+  <Tab title="Speed">
+    | Quantization | Search Speed | Index Build |
+    |--------------|-------------|------------|
+    | UNDEFINED | Baseline | Baseline |
+    | FP16 | ~1.2x faster | Similar |
+    | INT8 | ~2-3x faster | Faster |
+    | INT4 | ~3-4x faster | Much faster |
+    
+    <Tip>
+      Lower precision enables:
+      - Better CPU cache utilization
+      - SIMD optimizations
+      - Reduced memory bandwidth
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with FP16">
+    Begin with `FP16` quantization for most applications. It provides excellent memory savings with minimal quality loss.
+    
+    ```python
+    quantize_type=QuantizeType.FP16  # Safe default
+    ```
+  </Step>
+  
+  <Step title="Benchmark with Your Data">
+    Test different quantization levels with your specific dataset and queries:
+    
+    ```python
+    # Create test collections with different quantization
+    for qtype in [QuantizeType.UNDEFINED, QuantizeType.FP16, 
+                  QuantizeType.INT8, QuantizeType.INT4]:
+        test_collection = create_test_collection(qtype)
+        recall = evaluate_recall(test_collection, test_queries)
+        print(f"{qtype.name}: {recall:.2%} recall")
+    ```
+  </Step>
+  
+  <Step title="Consider Your Scale">
+    Choose quantization based on dataset size:
+    
+    - **< 1M vectors**: FP16 or UNDEFINED
+    - **1-10M vectors**: FP16 or INT8
+    - **10-100M vectors**: INT8
+    - **> 100M vectors**: INT8 or INT4
+  </Step>
+  
+  <Step title="Monitor Quality Metrics">
+    Track recall, precision, and user satisfaction after deploying quantization:
+    
+    ```python
+    # Monitor search quality
+    metrics = {
+        "recall_at_10": 0.95,
+        "ndcg_at_10": 0.92,
+        "user_clicks": 0.85
+    }
+    ```
+  </Step>
+</Steps>
+
+## Quantization and Vector Types
+
+<Warning>
+  **Compatibility**: Quantization is typically applied to `VECTOR_FP32` fields. Using `VECTOR_FP16` already provides 16-bit storage, so additional quantization may not be beneficial.
+  
+  ```python
+  # ❌ Redundant: FP16 vector with FP16 quantization
+  Field(
+      dtype=DataType.VECTOR_FP16,
+      quantize_type=QuantizeType.FP16
+  )
+  
+  # ✅ Correct: FP32 vector with FP16 quantization
+  Field(
+      dtype=DataType.VECTOR_FP32,
+      quantize_type=QuantizeType.FP16
+  )
+  ```
+</Warning>
+
+## Advanced Considerations
+
+### Re-ranking with Quantized Vectors
+
+For critical applications, use quantized vectors for initial retrieval, then re-rank with full precision:
+
+```python
+# Retrieve more candidates with quantized vectors
+results = collection.query(
+    vectors={"quantized_vec": query_embedding},
+    topn=100  # Over-retrieve
+)
+
+# Re-rank top results with full precision or external model
+final_results = rerank(results, topn=10)
+```
+
+### Calibration
+
+Some quantization methods benefit from calibration on representative data:
+
+```python
+# Collect calibration data
+calibration_vectors = sample_representative_vectors(n=10000)
+
+# Quantization uses calibration internally
+field = Field(
+    name="embedding",
+    dtype=DataType.VECTOR_FP32,
+    dim=768,
+    quantize_type=QuantizeType.INT8
+)
+```
+
+## See Also
+
+- [DataType](/api/types/data-type) - Vector data types
+- [Field Definition](/api/schema/field-schema) - Schema field configuration
+- [IndexType](/api/types/index-type) - Index types for vector search
+- [Performance Tuning](/guides/performance-tuning) - Optimization strategies

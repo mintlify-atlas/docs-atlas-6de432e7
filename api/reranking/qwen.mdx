@@ -1,0 +1,331 @@
+---
+title: QwenReRanker
+description: Model-based semantic reranking using Qwen/DashScope API
+---
+
+## Overview
+
+`QwenReRanker` leverages DashScope's TextReRank service to perform cross-encoder style reranking. It sends query and document pairs to the API and receives relevance scores based on deep semantic understanding.
+
+This reranker is suitable for single-vector or multi-vector search scenarios where semantic relevance to a specific query is required.
+
+<Note>
+  **Requirements**:
+  - `dashscope` Python package must be installed
+  - Valid DashScope API key
+  - API rate limits and quotas apply per DashScope subscription
+</Note>
+
+## Constructor
+
+```python
+from zvec.extension import QwenReRanker
+
+reranker = QwenReRanker(
+    query="machine learning algorithms",
+    topn=5,
+    rerank_field="content",
+    model="gte-rerank-v2",
+    api_key="your-api-key"
+)
+```
+
+### Parameters
+
+<ParamField path="query" type="str" required>
+  Query text for semantic re-ranking. Cannot be empty or `None`.
+</ParamField>
+
+<ParamField path="topn" type="int" default="10">
+  Maximum number of documents to return after re-ranking.
+</ParamField>
+
+<ParamField path="rerank_field" type="str" required>
+  Document field name to use as re-ranking input text (e.g., `"content"`, `"title"`, `"body"`).
+</ParamField>
+
+<ParamField path="model" type="str" default="gte-rerank-v2">
+  DashScope re-ranking model identifier. Available models:
+  - `"gte-rerank-v2"` (default)
+  - Other models supported by DashScope TextReRank API
+</ParamField>
+
+<ParamField path="api_key" type="str | None" default="None">
+  DashScope API authentication key. If not provided, reads from `DASHSCOPE_API_KEY` environment variable.
+</ParamField>
+
+<Warning>
+  Raises `ValueError` if `query` is empty/None, `rerank_field` is None, or API key is not available.
+</Warning>
+
+## Properties
+
+<ResponseField name="query" type="str">
+  Query text used for semantic re-ranking.
+</ResponseField>
+
+<ResponseField name="topn" type="int">
+  Maximum number of documents to return.
+</ResponseField>
+
+<ResponseField name="rerank_field" type="str">
+  Document field used for re-ranking input.
+</ResponseField>
+
+<ResponseField name="model" type="str">
+  DashScope model name.
+</ResponseField>
+
+## Methods
+
+### rerank()
+
+```python
+def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]
+```
+
+Re-rank documents using Qwen's TextReRank API.
+
+<ParamField path="query_results" type="dict[str, list[Doc]]">
+  Mapping from vector field names to lists of retrieved documents. Documents from all fields are deduplicated and re-ranked together.
+</ParamField>
+
+<ResponseField name="returns" type="list[Doc]">
+  Re-ranked documents (up to `topn`) with updated `score` fields containing relevance scores from the API.
+</ResponseField>
+
+<Note>
+  **Behavior**:
+  - Duplicate documents (same ID) across fields are processed once
+  - Documents with empty/missing `rerank_field` content are skipped
+  - Returned scores are relevance scores from the cross-encoder model
+</Note>
+
+## Usage Examples
+
+### Basic Semantic Reranking
+
+```python
+from zvec import Collection
+from zvec.extension import QwenReRanker
+import os
+
+# Set API key via environment variable
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+# Create collection
+collection = Collection("articles")
+
+# Create reranker with query
+reranker = QwenReRanker(
+    query="What are the latest advances in transformer models?",
+    topn=5,
+    rerank_field="content"
+)
+
+# Query with vector search, then rerank semantically
+results = collection.query(
+    vectors={"content_vec": query_embedding},
+    topn=20,  # Get more results for reranking
+    reranker=reranker
+)
+
+for i, doc in enumerate(results, 1):
+    print(f"{i}. {doc.id} (relevance: {doc.score:.4f})")
+    print(f"   {doc.field('title')}\n")
+```
+
+### Multi-Vector Search with Semantic Reranking
+
+```python
+from zvec.extension import QwenReRanker
+
+collection = Collection("products")
+
+# First stage: retrieve from multiple vector fields
+# Second stage: rerank using semantic understanding
+reranker = QwenReRanker(
+    query="wireless noise cancelling headphones under $200",
+    topn=10,
+    rerank_field="description",
+    model="gte-rerank-v2"
+)
+
+results = collection.query(
+    vectors={
+        "title_vec": title_embedding,
+        "desc_vec": desc_embedding,
+        "spec_vec": spec_embedding
+    },
+    topn=50,  # Cast a wide net
+    reranker=reranker
+)
+
+for doc in results[:5]:
+    print(f"Product: {doc.field('title')}")
+    print(f"Relevance: {doc.score:.4f}")
+    print(f"Price: ${doc.field('price')}\n")
+```
+
+### Different Reranking Fields
+
+```python
+# Rerank based on document titles
+title_reranker = QwenReRanker(
+    query="python tutorial",
+    topn=10,
+    rerank_field="title"
+)
+
+# Rerank based on full content
+content_reranker = QwenReRanker(
+    query="python tutorial",
+    topn=10,
+    rerank_field="content"
+)
+
+# Rerank based on combined field
+summary_reranker = QwenReRanker(
+    query="python tutorial",
+    topn=10,
+    rerank_field="summary"
+)
+```
+
+### Passing API Key Explicitly
+
+```python
+reranker = QwenReRanker(
+    query="machine learning",
+    topn=5,
+    rerank_field="content",
+    api_key="sk-your-api-key-here"  # Explicit API key
+)
+
+results = collection.query(
+    vectors={"content_vec": embedding},
+    reranker=reranker
+)
+```
+
+## How It Works
+
+1. **Collect Documents**: Gather and deduplicate documents from all vector field queries
+2. **Extract Text**: Extract text content from the specified `rerank_field`
+3. **API Call**: Send query and document texts to DashScope TextReRank API
+4. **Score Update**: Update document scores with relevance scores from the model
+5. **Rank**: Return top `n` documents by relevance score
+
+### API Request Format
+
+The reranker sends requests to DashScope in this format:
+
+```python
+{
+    "query": "your query text",
+    "documents": [
+        "document 1 content",
+        "document 2 content",
+        ...
+    ],
+    "top_n": 10
+}
+```
+
+### API Response Format
+
+```python
+{
+    "results": [
+        {"index": 0, "relevance_score": 0.95},
+        {"index": 3, "relevance_score": 0.87},
+        ...
+    ]
+}
+```
+
+## When to Use Qwen Reranking
+
+<Check>
+  **Use QwenReRanker when**:
+  - You need semantic relevance beyond vector similarity
+  - Query intent requires deep understanding
+  - Precision is more important than speed
+  - Working with natural language queries
+  - Combining diverse document types
+</Check>
+
+<Warning>
+  **Consider alternatives when**:
+  - Low latency is critical (adds API round-trip time)
+  - High query volume (API costs and rate limits)
+  - Simple keyword/vector matching is sufficient
+  - Offline or air-gapped environments (use local models)
+</Warning>
+
+## Performance Considerations
+
+<Tip>
+  **Optimization Tips**:
+  - Retrieve more candidates (e.g., `topn=50`) before reranking for better coverage
+  - Use shorter `rerank_field` content to reduce API latency
+  - Cache reranking results for repeated queries
+  - Monitor API usage and costs
+  - Consider batch processing for offline scenarios
+</Tip>
+
+## Error Handling
+
+```python
+try:
+    reranker = QwenReRanker(
+        query="",  # Empty query
+        rerank_field="content"
+    )
+except ValueError as e:
+    print(f"Configuration error: {e}")
+
+try:
+    results = collection.query(
+        vectors={"vec": embedding},
+        reranker=reranker
+    )
+except Exception as e:
+    print(f"Reranking failed: {e}")
+    # Fallback to unranked results
+    results = collection.query(vectors={"vec": embedding})
+```
+
+## API Key Configuration
+
+Two ways to provide the API key:
+
+### Environment Variable (Recommended)
+
+```bash
+export DASHSCOPE_API_KEY="your-api-key"
+```
+
+```python
+reranker = QwenReRanker(
+    query="my query",
+    rerank_field="content"
+)  # Reads from environment
+```
+
+### Explicit Parameter
+
+```python
+reranker = QwenReRanker(
+    query="my query",
+    rerank_field="content",
+    api_key="your-api-key"
+)
+```
+
+## Related Resources
+
+- [DashScope TextReRank Documentation](https://help.aliyun.com/zh/dashscope/)
+- [Reranking Overview](/api/reranking/overview)
+- [RrfReRanker](/api/reranking/rrf)
+- [WeightedReRanker](/api/reranking/weighted)

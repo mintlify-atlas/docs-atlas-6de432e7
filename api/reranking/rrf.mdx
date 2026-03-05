@@ -1,0 +1,162 @@
+---
+title: RrfReRanker
+description: Reciprocal Rank Fusion for multi-vector search
+---
+
+## Overview
+
+`RrfReRanker` combines results from multiple vector queries using Reciprocal Rank Fusion (RRF). This algorithm assigns higher weight to documents that appear early in multiple result lists, without requiring relevance scores.
+
+The RRF score for a document at rank `r` is calculated as:
+
+```
+score = 1 / (k + r + 1)
+```
+
+where `k` is the rank constant.
+
+<Note>
+  This reranker is specifically designed for multi-vector scenarios where query results from multiple vector fields need to be combined.
+</Note>
+
+## Constructor
+
+```python
+from zvec.extension import RrfReRanker
+
+reranker = RrfReRanker(
+    topn=10,
+    rerank_field=None,
+    rank_constant=60
+)
+```
+
+### Parameters
+
+<ParamField path="topn" type="int" default="10">
+  Number of top documents to return after reranking.
+</ParamField>
+
+<ParamField path="rerank_field" type="str | None" default="None">
+  Ignored by RRF. This parameter exists for API consistency but has no effect.
+</ParamField>
+
+<ParamField path="rank_constant" type="int" default="60">
+  Smoothing constant `k` in the RRF formula. Larger values reduce the impact of early ranks, making the fusion more balanced across different result lists.
+</ParamField>
+
+## Properties
+
+<ResponseField name="rank_constant" type="int">
+  The rank constant used in the RRF score calculation.
+</ResponseField>
+
+<ResponseField name="topn" type="int">
+  Number of top documents to return.
+</ResponseField>
+
+## Methods
+
+### rerank()
+
+```python
+def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]
+```
+
+Apply Reciprocal Rank Fusion to combine multiple query results.
+
+<ParamField path="query_results" type="dict[str, list[Doc]]">
+  Results from one or more vector queries. Keys are vector field names, values are lists of retrieved documents.
+</ParamField>
+
+<ResponseField name="returns" type="list[Doc]">
+  Re-ranked documents with RRF scores in the `score` field.
+</ResponseField>
+
+## Usage Example
+
+### Multi-Vector Search with RRF
+
+```python
+from zvec import Collection
+from zvec.extension import RrfReRanker
+
+# Create collection with multiple vector fields
+collection = Collection("products")
+
+# Create RRF reranker
+reranker = RrfReRanker(
+    topn=10,
+    rank_constant=60  # Default smoothing constant
+)
+
+# Query multiple vector fields
+results = collection.query(
+    vectors={
+        "title_vec": title_embedding,
+        "description_vec": desc_embedding,
+        "tags_vec": tags_embedding
+    },
+    topn=20,  # Retrieve more results before reranking
+    reranker=reranker
+)
+
+for doc in results:
+    print(f"ID: {doc.id}, RRF Score: {doc.score}")
+```
+
+### Adjusting Rank Constant
+
+The `rank_constant` parameter controls how aggressively early ranks are weighted:
+
+```python
+# Lower rank_constant = more weight on top-ranked documents
+reranker_aggressive = RrfReRanker(topn=10, rank_constant=10)
+
+# Higher rank_constant = more balanced fusion
+reranker_balanced = RrfReRanker(topn=10, rank_constant=100)
+```
+
+## How It Works
+
+1. **Collect Results**: Gather documents from all vector field queries
+2. **Calculate RRF Scores**: For each document, sum RRF scores across all queries where it appears
+3. **Deduplicate**: Documents appearing in multiple result lists are processed once
+4. **Rank**: Return top `n` documents by RRF score
+
+### Example
+
+Given two query results:
+
+```python
+query_results = {
+    "title_vec": [doc_A, doc_B, doc_C],  # ranks 0, 1, 2
+    "desc_vec": [doc_B, doc_D, doc_A]    # ranks 0, 1, 2
+}
+```
+
+With `rank_constant=60`:
+
+- **doc_A**: `1/(60+2+1) + 1/(60+0+1)` = `0.0159 + 0.0164` = `0.0323`
+- **doc_B**: `1/(60+1+1) + 1/(60+0+1)` = `0.0161 + 0.0164` = `0.0325` ← highest
+- **doc_C**: `1/(60+2+1)` = `0.0159`
+- **doc_D**: `1/(60+1+1)` = `0.0161`
+
+**Final ranking**: doc_B, doc_A, doc_D, doc_C
+
+## When to Use RRF
+
+<Check>
+  **Use RRF when**:
+  - Combining results from multiple vector fields
+  - You don't have access to raw similarity scores
+  - You want a simple, parameter-free fusion method
+  - Query fields have similar importance
+</Check>
+
+<Warning>
+  **Consider alternatives when**:
+  - Different fields should have different importance (use [WeightedReRanker](/api/reranking/weighted))
+  - You need semantic understanding (use [QwenReRanker](/api/reranking/qwen))
+  - Working with single-vector search (reranking not needed)
+</Warning>

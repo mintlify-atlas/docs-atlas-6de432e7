@@ -1,0 +1,276 @@
+---
+title: Collections
+description: Understanding collections in Zvec - the fundamental container for your vector data
+---
+
+A **collection** is the primary container for storing and querying documents in Zvec. Each collection has a fixed schema that defines its structure, including scalar fields and vector fields.
+
+## What is a Collection?
+
+A collection in Zvec is similar to a table in traditional databases. It:
+
+- Stores documents with a consistent schema
+- Persists data to disk for durability
+- Supports CRUD operations (Create, Read, Update, Delete)
+- Enables vector similarity search with optional filtering
+- Manages indexes for efficient querying
+
+## Collection Lifecycle
+
+### Creating a New Collection
+
+Use `create_and_open()` to create a new collection with a defined schema:
+
+```python
+import zvec
+from zvec import CollectionSchema, FieldSchema, VectorSchema, DataType
+
+# Initialize Zvec
+zvec.init()
+
+# Define the schema
+schema = CollectionSchema(
+    name="my_collection",
+    fields=[
+        FieldSchema("id", DataType.INT64, nullable=False),
+        FieldSchema("title", DataType.STRING, nullable=False),
+        FieldSchema("category", DataType.STRING, nullable=True)
+    ],
+    vectors=VectorSchema(
+        name="embedding",
+        data_type=DataType.VECTOR_FP32,
+        dimension=768
+    )
+)
+
+# Create and open the collection
+collection = zvec.create_and_open(
+    path="./data/my_collection",
+    schema=schema
+)
+```
+
+### Opening an Existing Collection
+
+Use `open()` to access a previously created collection:
+
+```python
+import zvec
+
+zvec.init()
+
+# Open existing collection
+collection = zvec.open("./data/my_collection")
+
+# Access collection properties
+print(f"Collection path: {collection.path}")
+print(f"Collection schema: {collection.schema}")
+print(f"Document count: {collection.stats.doc_count}")
+```
+
+<Note>
+  The collection must have been previously created with `create_and_open()`. Opening a non-existent collection will raise an error.
+</Note>
+
+## Collection Properties
+
+The `Collection` class exposes several read-only properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `path` | `str` | Filesystem path where collection data is stored |
+| `schema` | `CollectionSchema` | The schema defining the collection structure |
+| `stats` | `CollectionStats` | Runtime statistics (document count, size, etc.) |
+| `option` | `CollectionOption` | Configuration options used to open the collection |
+
+## Core Collection Operations
+
+### Data Manipulation (DML)
+
+Collections support standard CRUD operations:
+
+```python
+from zvec import Doc
+
+# Insert new documents
+doc = Doc(
+    id="doc1",
+    fields={"title": "Introduction to Vectors", "category": "tutorial"},
+    vectors={"embedding": [0.1, 0.2, 0.3, ...]}  # 768-dim vector
+)
+status = collection.insert(doc)
+
+# Insert multiple documents
+docs = [doc1, doc2, doc3]
+statuses = collection.insert(docs)
+
+# Update existing documents
+updated_doc = Doc(id="doc1", fields={"category": "guide"})
+collection.update(updated_doc)
+
+# Upsert (insert or update)
+collection.upsert(doc)
+
+# Delete by ID
+collection.delete("doc1")
+collection.delete(["doc2", "doc3"])
+
+# Delete by filter expression
+collection.delete_by_filter("category == 'outdated'")
+```
+
+### Data Retrieval (DQL)
+
+```python
+# Fetch documents by ID
+docs = collection.fetch(["doc1", "doc2"])
+for doc_id, doc in docs.items():
+    print(f"ID: {doc_id}, Title: {doc.field('title')}")
+
+# Vector similarity search
+from zvec import VectorQuery
+
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=[0.1, 0.2, 0.3, ...]
+    ),
+    topk=10,
+    filter="category == 'tutorial'",
+    output_fields=["title", "category"]
+)
+
+for doc in results:
+    print(f"Score: {doc.score}, Title: {doc.field('title')}")
+```
+
+### Schema Modification (DDL)
+
+Collections support dynamic schema changes:
+
+```python
+# Add a new column
+new_field = FieldSchema("author", DataType.STRING, nullable=True)
+collection.add_column(new_field, expression="'Unknown'")
+
+# Drop a column
+collection.drop_column("category")
+
+# Rename a column
+collection.alter_column(old_name="id", new_name="doc_id")
+
+# Create an index
+from zvec import HnswIndexParam
+
+collection.create_index(
+    field_name="embedding",
+    index_param=HnswIndexParam(m=16, ef_construction=200)
+)
+
+# Drop an index
+collection.drop_index("embedding")
+```
+
+<Warning>
+  Schema modification operations like `alter_column()` only support numeric scalar fields (INT32, INT64, UINT32, UINT64, FLOAT, DOUBLE).
+</Warning>
+
+## Persistence and Durability
+
+### Flushing Data
+
+By default, Zvec buffers writes in memory for performance. Use `flush()` to ensure data is persisted to disk:
+
+```python
+# Insert documents
+collection.insert(docs)
+
+# Force write to disk
+collection.flush()
+```
+
+### Optimizing Performance
+
+Periodically optimize the collection to merge segments and rebuild indexes:
+
+```python
+from zvec import OptimizeOption
+
+collection.optimize(option=OptimizeOption())
+```
+
+### Destroying a Collection
+
+<Warning>
+  This operation is **irreversible** and will permanently delete all data.
+</Warning>
+
+```python
+# Permanently delete the collection
+collection.destroy()
+```
+
+## Multi-Collection Workflows
+
+You can work with multiple collections simultaneously:
+
+```python
+import zvec
+
+zvec.init()
+
+# Open multiple collections
+products = zvec.open("./data/products")
+reviews = zvec.open("./data/reviews")
+users = zvec.open("./data/users")
+
+# Perform operations on each
+product_results = products.query(vectors=VectorQuery(...))
+review_results = reviews.query(vectors=VectorQuery(...))
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Design your schema carefully">
+    Collection schemas are fixed at creation time. Plan your fields and vector dimensions in advance. Use `nullable=True` for fields that may not always have values.
+  </Accordion>
+
+  <Accordion title="Batch operations when possible">
+    Inserting multiple documents at once is more efficient than individual inserts:
+    ```python
+    # Good: batch insert
+    collection.insert([doc1, doc2, doc3, ...])
+    
+    # Less efficient: individual inserts
+    collection.insert(doc1)
+    collection.insert(doc2)
+    collection.insert(doc3)
+    ```
+  </Accordion>
+
+  <Accordion title="Flush periodically for durability">
+    If your application requires strong durability guarantees, call `flush()` after critical writes. However, excessive flushing can impact performance.
+  </Accordion>
+
+  <Accordion title="Create indexes before large-scale queries">
+    Build appropriate indexes (HNSW, IVF) on vector fields before running similarity searches at scale. See [Indexing](/concepts/indexing) for details.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Schemas" icon="table" href="/concepts/schemas">
+    Learn how to define collection schemas with fields and vectors
+  </Card>
+  <Card title="Vectors" icon="vector-square" href="/concepts/vectors">
+    Understand dense and sparse vector types
+  </Card>
+  <Card title="Indexing" icon="magnifying-glass" href="/concepts/indexing">
+    Optimize search performance with indexes
+  </Card>
+  <Card title="Querying" icon="search" href="/concepts/querying">
+    Execute vector similarity searches with filters
+  </Card>
+</CardGroup>

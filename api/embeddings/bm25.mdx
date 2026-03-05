@@ -1,0 +1,457 @@
+---
+title: "BM25EmbeddingFunction"
+description: "BM25-based sparse embedding using DashText SDK"
+---
+
+## Overview
+
+`BM25EmbeddingFunction` provides text-to-sparse-vector embedding using the BM25 (Best Matching 25) algorithm. BM25 is a probabilistic retrieval function used for lexical search and document ranking based on term frequency and inverse document frequency.
+
+**Location**: `python/zvec/extension/bm25_embedding_function.py:24`
+
+## Installation
+
+```bash
+pip install dashtext
+```
+
+## Class Definition
+
+```python
+from zvec.extension import BM25EmbeddingFunction
+
+class BM25EmbeddingFunction(SparseEmbeddingFunction[TEXT]):
+    """BM25-based sparse embedding function using DashText SDK."""
+```
+
+## Constructor
+
+```python
+BM25EmbeddingFunction(
+    corpus: Optional[list[str]] = None,
+    encoding_type: Literal["query", "document"] = "query",
+    language: Literal["zh", "en"] = "zh",
+    b: float = 0.75,
+    k1: float = 1.2,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="corpus" type="Optional[list[str]]" default="None">
+  List of documents to train the BM25 encoder. If provided, creates a custom encoder trained on this corpus for better domain-specific accuracy. If `None`, uses the built-in encoder.
+</ParamField>
+
+<ParamField path="encoding_type" type="Literal['query', 'document']" default="query">
+  Encoding mode for text processing:
+  - `"query"`: Optimized for search queries (default)
+  - `"document"`: Optimized for document indexing
+</ParamField>
+
+<ParamField path="language" type="Literal['zh', 'en']" default="zh">
+  Language for built-in encoder (only used when corpus is None):
+  - `"zh"`: Chinese (trained on Chinese Wikipedia)
+  - `"en"`: English
+</ParamField>
+
+<ParamField path="b" type="float" default="0.75">
+  Document length normalization parameter for BM25. Range [0, 1]:
+  - `0`: No normalization
+  - `1`: Full normalization
+  
+  Only used with custom corpus.
+</ParamField>
+
+<ParamField path="k1" type="float" default="1.2">
+  Term frequency saturation parameter for BM25. Higher values give more weight to term frequency. Only used with custom corpus.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional parameters for DashText encoder customization.
+</ParamField>
+
+## Properties
+
+### corpus_size
+
+```python
+@property
+def corpus_size(self) -> int:
+    """Number of documents in the training corpus (0 if using built-in encoder)."""
+```
+
+### encoding_type
+
+```python
+@property
+def encoding_type(self) -> str:
+    """The encoding type being used ("query" or "document")."""
+```
+
+### language
+
+```python
+@property
+def language(self) -> str:
+    """The language of the built-in encoder ("zh" or "en")."""
+```
+
+## Methods
+
+### embed()
+
+```python
+@lru_cache(maxsize=10)
+def embed(self, input: TEXT) -> SparseVectorType:
+    """Generate BM25 sparse embedding for the input text."""
+```
+
+**Parameters:**
+- `input` (str): Input text string to embed. Must be non-empty.
+
+**Returns:**
+- `SparseVectorType`: Dictionary mapping vocabulary term index to BM25 score. Only non-zero scores included. Sorted by indices for consistency.
+
+**Raises:**
+- `TypeError`: If input is not a string
+- `ValueError`: If input is empty or whitespace-only
+- `RuntimeError`: If BM25 encoding fails
+
+<Note>
+The `embed()` method is cached with LRU cache (maxsize=10) for performance.
+</Note>
+
+## Usage Examples
+
+### Option 1: Built-in Encoder
+
+Use pre-trained encoders without providing a corpus:
+
+#### Chinese (Built-in)
+
+```python
+from zvec.extension import BM25EmbeddingFunction
+
+# For query encoding (Chinese)
+bm25_query_zh = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="query"
+)
+
+query_vec = bm25_query_zh.embed("什么是机器学习")
+print(isinstance(query_vec, dict))  # True
+print(query_vec)
+# {1169440797: 0.29, 2045788977: 0.70, ...}
+```
+
+#### Chinese (Document)
+
+```python
+# For document encoding (Chinese)
+bm25_doc_zh = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="document"
+)
+
+doc_vec = bm25_doc_zh.embed("机器学习是人工智能的一个重要分支...")
+print(isinstance(doc_vec, dict))  # True
+```
+
+#### English (Built-in)
+
+```python
+# Using built-in encoder for English
+bm25_query_en = BM25EmbeddingFunction(
+    language="en",
+    encoding_type="query"
+)
+
+query_vec_en = bm25_query_en.embed("what is vector search service")
+print(isinstance(query_vec_en, dict))  # True
+```
+
+### Option 2: Custom Corpus
+
+Train on your own corpus for domain-specific accuracy:
+
+```python
+# Prepare your corpus
+corpus = [
+    "机器学习是人工智能的一个重要分支",
+    "深度学习使用多层神经网络进行特征提取",
+    "自然语言处理技术用于理解和生成人类语言"
+]
+
+# Train custom BM25 encoder
+bm25_custom = BM25EmbeddingFunction(
+    corpus=corpus,
+    encoding_type="query",
+    b=0.75,
+    k1=1.2
+)
+
+custom_vec = bm25_custom.embed("机器学习算法")
+print(isinstance(custom_vec, dict))  # True
+print(f"Corpus size: {bm25_custom.corpus_size}")  # 3
+```
+
+### Asymmetric Retrieval
+
+```python
+# Query encoder
+query_emb = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="query"
+)
+
+# Document encoder
+doc_emb = BM25EmbeddingFunction(
+    language="zh",
+    encoding_type="document"
+)
+
+# Encode query and documents
+query_vec = query_emb.embed("什么是机器学习")
+doc1_vec = doc_emb.embed("机器学习是人工智能的一个子集...")
+doc2_vec = doc_emb.embed("深度学习使用神经网络...")
+
+# Calculate similarities (dot product)
+def sparse_dot_product(vec1, vec2):
+    return sum(
+        vec1.get(k, 0) * vec2.get(k, 0)
+        for k in set(vec1) | set(vec2)
+    )
+
+sim1 = sparse_dot_product(query_vec, doc1_vec)
+sim2 = sparse_dot_product(query_vec, doc2_vec)
+
+print(f"Doc1 similarity: {sim1:.3f}")
+print(f"Doc2 similarity: {sim2:.3f}")
+```
+
+### Callable Interface
+
+```python
+bm25 = BM25EmbeddingFunction(language="zh")
+
+# Both work the same
+vec1 = bm25.embed("query text")
+vec2 = bm25("query text")  # Callable
+```
+
+## Hybrid Search
+
+Combine with dense embeddings for optimal retrieval:
+
+```python
+from zvec.extension import DefaultLocalDenseEmbedding, BM25EmbeddingFunction
+
+# Dense for semantic similarity
+dense_emb = DefaultLocalDenseEmbedding()
+
+# Sparse for lexical matching
+bm25_emb = BM25EmbeddingFunction(language="zh", encoding_type="query")
+
+query = "machine learning algorithms"
+
+# Get both embeddings
+dense_vec = dense_emb.embed(query)  # Semantic
+sparse_vec = bm25_emb.embed(query)  # Lexical
+
+# Combine scores for hybrid retrieval
+# final_score = α * dense_score + (1-α) * sparse_score
+alpha = 0.7
+# ... calculate and combine scores
+```
+
+## BM25 Parameters
+
+### k1 (Term Frequency Saturation)
+
+- **Range**: [1.2, 2.0] typically
+- **Default**: 1.2
+- **Effect**:
+  - Lower values: Less emphasis on term frequency
+  - Higher values: More emphasis on term frequency
+  - Use higher k1 for long documents
+
+### b (Document Length Normalization)
+
+- **Range**: [0, 1]
+- **Default**: 0.75
+- **Effect**:
+  - `b = 0`: No normalization (document length ignored)
+  - `b = 1`: Full normalization (penalize long documents)
+  - `b = 0.75`: Balanced (common default)
+
+### Example: Tuning Parameters
+
+```python
+corpus = [
+    "Short document",
+    "This is a much longer document with many more words and terms",
+    "Medium length document here"
+]
+
+# More emphasis on term frequency, less on document length
+bm25_custom = BM25EmbeddingFunction(
+    corpus=corpus,
+    k1=2.0,  # Higher k1
+    b=0.5    # Lower b
+)
+
+vec = bm25_custom.embed("document")
+```
+
+## Built-in vs Custom Encoder
+
+<Tabs>
+  <Tab title="Built-in Encoder">
+    **Advantages:**
+    - No corpus needed
+    - Works out-of-the-box
+    - Good generalization
+    - Pre-trained on Wikipedia
+    
+    **Best For:**
+    - General-purpose search
+    - Quick prototyping
+    - When you don't have a corpus
+    
+    ```python
+    bm25 = BM25EmbeddingFunction(language="zh")
+    ```
+  </Tab>
+  
+  <Tab title="Custom Encoder">
+    **Advantages:**
+    - Better accuracy for your domain
+    - Custom vocabulary
+    - Tunable BM25 parameters (k1, b)
+    
+    **Best For:**
+    - Domain-specific terminology
+    - Production systems
+    - When you have a representative corpus
+    
+    ```python
+    bm25 = BM25EmbeddingFunction(
+        corpus=my_documents,
+        k1=1.5,
+        b=0.75
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+```python
+try:
+    vec = bm25.embed("")  # Empty string
+except ValueError as e:
+    print(f"Error: {e}")
+    # Error: Input text cannot be empty or whitespace only
+
+try:
+    vec = bm25.embed(123)  # Wrong type
+except TypeError as e:
+    print(f"Error: {e}")
+    # Error: Expected 'input' to be str, got int
+
+try:
+    # Invalid corpus
+    bm25 = BM25EmbeddingFunction(corpus=[])
+except ValueError as e:
+    print(f"Error: {e}")
+    # Error: Corpus must be a non-empty list of strings
+```
+
+## Best Practices
+
+<Tip>
+**Corpus Selection**: When using custom corpus, include representative documents from your domain:
+
+```python
+# Good: Representative documents
+corpus = [
+    "Document from your domain...",
+    "Another document...",
+    # ... more documents
+]
+
+# Bad: Single or unrelated documents
+corpus = ["Hello world"]  # Too small
+```
+</Tip>
+
+<Info>
+**Encoding Types**: Use appropriate encoding type:
+- `encoding_type="query"` for short search queries
+- `encoding_type="document"` for longer documents being indexed
+
+This optimizes BM25 scoring for asymmetric retrieval.
+</Info>
+
+<Warning>
+**Language Consistency**: Ensure the language parameter matches your text:
+
+```python
+# Correct
+bm25_zh = BM25EmbeddingFunction(language="zh")
+vec = bm25_zh.embed("中文文本")  # Chinese text
+
+# Incorrect
+bm25_zh = BM25EmbeddingFunction(language="zh")
+vec = bm25_zh.embed("English text")  # Wrong language
+```
+</Warning>
+
+## Performance Characteristics
+
+- **Memory**: O(vocabulary_size) for encoder
+- **Encoding Speed**: ~1000-5000 docs/sec
+- **Output Size**: ~50-200 non-zero dimensions per text
+- **Caching**: Results cached (maxsize=10)
+- **No GPU**: Runs on CPU only (DashText limitation)
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Keyword Search" icon="magnifying-glass">
+    Exact term matching and lexical search
+  </Card>
+  <Card title="Document Ranking" icon="ranking-star">
+    Traditional information retrieval and BM25 scoring
+  </Card>
+  <Card title="Hybrid Retrieval" icon="layer-group">
+    Combining with dense embeddings for best results
+  </Card>
+  <Card title="Domain-Specific" icon="industry">
+    Custom vocabularies for specialized domains
+  </Card>
+</CardGroup>
+
+## Notes
+
+- Requires Python 3.10, 3.11, or 3.12
+- Requires `dashtext` package: `pip install dashtext`
+- No API key or network required (local computation)
+- Results are cached (LRU cache, maxsize=10)
+- Output is sorted by indices for consistency
+- DashText handles Chinese/English text segmentation automatically
+
+## See Also
+
+- [SparseEmbeddingFunction](/api/embeddings/sparse) - Base class documentation
+- [DefaultLocalSparseEmbedding](/api/embeddings/sentence-transformers) - SPLADE-based sparse embedding
+- [QwenSparseEmbedding](/api/embeddings/qwen) - API-based sparse embedding
+- [DefaultLocalDenseEmbedding](/api/embeddings/sentence-transformers) - Dense embedding for hybrid search
+- [Embedding Functions Overview](/api/embeddings/overview)
+
+## References
+
+- [DashText Documentation](https://help.aliyun.com/zh/document_detail/2546039.html)
+- [DashText PyPI](https://pypi.org/project/dashtext/)
+- BM25 Algorithm: Robertson & Zaragoza (2009)

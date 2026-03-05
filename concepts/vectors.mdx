@@ -1,0 +1,509 @@
+---
+title: Vectors
+description: Understanding dense and sparse vectors in Zvec for similarity search
+---
+
+Vectors are the core data structure for similarity search in Zvec. A **vector** is a numerical representation (embedding) of data like text, images, or audio that captures semantic meaning in a high-dimensional space.
+
+## Vector Types
+
+Zvec supports two fundamental vector types:
+
+- **Dense vectors**: Fixed-length arrays where every dimension has a value
+- **Sparse vectors**: Variable-length dictionaries where most dimensions are zero
+
+### Dense Vectors
+
+Dense vectors are represented as arrays where every position contains a value:
+
+```python
+# Dense vector: 768 dimensions, all positions have values
+dense_vector = [
+    0.123, -0.456, 0.789, 0.012, ...,  # 768 values total
+]
+
+# Can also use NumPy arrays
+import numpy as np
+dense_vector = np.array([0.123, -0.456, 0.789, ...], dtype=np.float32)
+```
+
+**Common use cases:**
+- Text embeddings (e.g., from transformers like BERT, GPT)
+- Image embeddings (e.g., from CNNs or vision transformers)
+- Audio embeddings
+- General-purpose semantic representations
+
+### Sparse Vectors
+
+Sparse vectors are represented as dictionaries mapping indices to non-zero values:
+
+```python
+# Sparse vector: only store non-zero dimensions
+sparse_vector = {
+    42: 0.891,      # index 42 has value 0.891
+    156: 1.234,     # index 156 has value 1.234
+    789: 0.456,     # index 789 has value 0.456
+    # All other dimensions are implicitly 0
+}
+```
+
+**Common use cases:**
+- Keyword-based search (e.g., BM25 embeddings)
+- TF-IDF vectors
+- Bag-of-words representations
+- High-dimensional feature vectors with few active features
+
+## Dense Vector Data Types
+
+Zvec supports multiple precision levels for dense vectors:
+
+### DataType.VECTOR_FP32 (Recommended)
+
+32-bit floating point (single precision) - the most common choice:
+
+```python
+from zvec import VectorSchema, DataType
+
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP32,
+    dimension=768
+)
+```
+
+**Characteristics:**
+- **Precision**: ~7 decimal digits
+- **Memory**: 4 bytes per dimension
+- **Use case**: Standard choice for most applications
+
+### DataType.VECTOR_FP16
+
+16-bit floating point (half precision) - reduced memory:
+
+```python
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP16,
+    dimension=768
+)
+```
+
+**Characteristics:**
+- **Precision**: ~3 decimal digits
+- **Memory**: 2 bytes per dimension (50% reduction vs FP32)
+- **Use case**: Large-scale systems where memory is constrained
+
+### DataType.VECTOR_FP64
+
+64-bit floating point (double precision) - maximum precision:
+
+```python
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_FP64,
+    dimension=768
+)
+```
+
+**Characteristics:**
+- **Precision**: ~15 decimal digits
+- **Memory**: 8 bytes per dimension (2x FP32)
+- **Use case**: Scientific applications requiring high precision
+
+### DataType.VECTOR_INT8
+
+8-bit integer - quantized vectors:
+
+```python
+vector_field = VectorSchema(
+    name="embedding",
+    data_type=DataType.VECTOR_INT8,
+    dimension=768
+)
+```
+
+**Characteristics:**
+- **Precision**: Integer values from -128 to 127
+- **Memory**: 1 byte per dimension (75% reduction vs FP32)
+- **Use case**: Extreme memory optimization, quantized embeddings
+
+## Sparse Vector Data Types
+
+Zvec supports two sparse vector types:
+
+### DataType.SPARSE_VECTOR_FP32
+
+32-bit floating point sparse vectors:
+
+```python
+from zvec import VectorSchema, DataType
+
+sparse_field = VectorSchema(
+    name="keyword_embedding",
+    data_type=DataType.SPARSE_VECTOR_FP32,
+    dimension=0  # Dimension not required for sparse vectors
+)
+```
+
+### DataType.SPARSE_VECTOR_FP16
+
+16-bit floating point sparse vectors:
+
+```python
+sparse_field = VectorSchema(
+    name="keyword_embedding",
+    data_type=DataType.SPARSE_VECTOR_FP16,
+    dimension=0
+)
+```
+
+<Info>
+  For sparse vectors, set `dimension=0` since the actual dimensionality is implicit in the data.
+</Info>
+
+## Working with Vectors
+
+### Inserting Documents with Dense Vectors
+
+```python
+import zvec
+from zvec import Doc
+import numpy as np
+
+# Open collection
+collection = zvec.open("./data/my_collection")
+
+# Create document with dense vector
+doc = Doc(
+    id="doc1",
+    fields={
+        "title": "Introduction to Machine Learning",
+        "category": "AI"
+    },
+    vectors={
+        "embedding": [0.123, -0.456, 0.789, ...]  # 768-dim vector
+    }
+)
+
+# Insert document
+collection.insert(doc)
+
+# Can also use NumPy arrays (automatically converted to lists)
+vector_array = np.random.randn(768).astype(np.float32)
+doc2 = Doc(
+    id="doc2",
+    fields={"title": "Deep Learning Basics"},
+    vectors={"embedding": vector_array}
+)
+collection.insert(doc2)
+```
+
+### Inserting Documents with Sparse Vectors
+
+```python
+from zvec import Doc
+
+# Create document with sparse vector
+doc = Doc(
+    id="doc1",
+    fields={"title": "Python programming tutorial"},
+    vectors={
+        "keyword_embedding": {
+            10: 0.891,    # "python" dimension
+            42: 1.234,    # "programming" dimension
+            156: 0.678    # "tutorial" dimension
+        }
+    }
+)
+
+collection.insert(doc)
+```
+
+### Querying with Vectors
+
+```python
+from zvec import VectorQuery
+
+# Query with dense vector
+query_vector = [0.1, 0.2, 0.3, ...]  # 768-dim
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        vector=query_vector
+    ),
+    topk=10
+)
+
+# Query with sparse vector
+sparse_query = {10: 0.5, 42: 0.8, 156: 0.3}
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="keyword_embedding",
+        vector=sparse_query
+    ),
+    topk=10
+)
+
+# Query by document ID (use existing document's vector)
+results = collection.query(
+    vectors=VectorQuery(
+        field_name="embedding",
+        id="doc1"  # Use doc1's vector as query
+    ),
+    topk=10
+)
+```
+
+## Multi-Vector Support
+
+Zvec supports multiple vector fields per collection for hybrid search:
+
+```python
+from zvec import CollectionSchema, VectorSchema, DataType, HnswIndexParam
+
+# Define schema with multiple vector fields
+schema = CollectionSchema(
+    name="multimodal_collection",
+    fields=[...],
+    vectors=[
+        # Text embedding
+        VectorSchema(
+            name="text_embedding",
+            data_type=DataType.VECTOR_FP32,
+            dimension=768,
+            index_param=HnswIndexParam()
+        ),
+        # Image embedding
+        VectorSchema(
+            name="image_embedding",
+            data_type=DataType.VECTOR_FP32,
+            dimension=512,
+            index_param=HnswIndexParam()
+        ),
+        # Keyword embedding (sparse)
+        VectorSchema(
+            name="keyword_embedding",
+            data_type=DataType.SPARSE_VECTOR_FP32,
+            dimension=0
+        )
+    ]
+)
+
+# Create collection
+collection = zvec.create_and_open("./data/multimodal", schema)
+
+# Insert document with multiple vectors
+from zvec import Doc
+
+doc = Doc(
+    id="doc1",
+    fields={"title": "Cat photo with description"},
+    vectors={
+        "text_embedding": [0.1, 0.2, ...],      # 768-dim text vector
+        "image_embedding": [0.5, 0.6, ...],     # 512-dim image vector
+        "keyword_embedding": {10: 0.8, 42: 0.5} # Sparse keyword vector
+    }
+)
+collection.insert(doc)
+
+# Query with multiple vectors (hybrid search)
+from zvec import VectorQuery
+
+results = collection.query(
+    vectors=[
+        VectorQuery(field_name="text_embedding", vector=[0.1, 0.2, ...]),
+        VectorQuery(field_name="keyword_embedding", vector={10: 0.8})
+    ],
+    topk=10
+)
+```
+
+## Vector Dimensions
+
+### Choosing Dimensions
+
+Common embedding dimensions:
+
+| Model | Dimension | Type |
+|-------|-----------|------|
+| BERT-base | 768 | Dense |
+| BERT-large | 1024 | Dense |
+| GPT-3 (small) | 1536 | Dense |
+| OpenAI text-embedding-3-small | 1536 | Dense |
+| OpenAI text-embedding-3-large | 3072 | Dense |
+| CLIP (image+text) | 512 | Dense |
+| BM25 | Variable | Sparse |
+
+### Dimension Validation
+
+Zvec validates vector dimensions at insertion time:
+
+```python
+# Schema defines 768-dimensional vectors
+schema = CollectionSchema(
+    name="test",
+    vectors=VectorSchema("embedding", DataType.VECTOR_FP32, dimension=768)
+)
+
+collection = zvec.create_and_open("./data/test", schema)
+
+# This will raise an error (wrong dimension)
+doc = Doc(
+    id="doc1",
+    vectors={"embedding": [0.1, 0.2, 0.3]}  # Only 3 dims, expected 768
+)
+collection.insert(doc)  # Error: dimension mismatch
+
+# Correct usage
+doc = Doc(
+    id="doc1",
+    vectors={"embedding": [0.1] * 768}  # Correct: 768 dimensions
+)
+collection.insert(doc)  # Success
+```
+
+## Vector Type Conversion
+
+Zvec automatically handles type conversions:
+
+```python
+import numpy as np
+from zvec import Doc
+
+# NumPy arrays are automatically converted to lists
+np_vector = np.random.randn(768).astype(np.float32)
+doc = Doc(
+    id="doc1",
+    vectors={"embedding": np_vector}  # Automatically converted to list
+)
+
+# Python lists are used directly
+list_vector = [0.1, 0.2, 0.3, ...]
+doc = Doc(
+    id="doc2",
+    vectors={"embedding": list_vector}
+)
+
+# Sparse vectors must be dictionaries
+sparse_vector = {10: 0.5, 42: 0.8}
+doc = Doc(
+    id="doc3",
+    vectors={"sparse_embedding": sparse_vector}
+)
+```
+
+## Performance Considerations
+
+<AccordionGroup>
+  <Accordion title="Dense vs Sparse: When to use each">
+    **Use dense vectors when:**
+    - Working with neural network embeddings (transformers, CNNs)
+    - Dimensions are relatively low (< 2000)
+    - Most dimensions have non-zero values
+    
+    **Use sparse vectors when:**
+    - Working with keyword-based methods (BM25, TF-IDF)
+    - Dimensionality is very high (> 10,000)
+    - Most dimensions are zero (sparsity > 95%)
+  </Accordion>
+
+  <Accordion title="Choosing precision: FP32 vs FP16 vs INT8">
+    **FP32 (recommended):**
+    - Standard precision for most applications
+    - Good balance of accuracy and performance
+    
+    **FP16:**
+    - 50% memory savings
+    - Minimal accuracy loss for most embeddings
+    - Good for large-scale deployments
+    
+    **INT8:**
+    - 75% memory savings
+    - Requires quantization-aware training or calibration
+    - Best for extreme memory constraints
+  </Accordion>
+
+  <Accordion title="Memory usage calculation">
+    Calculate memory per vector:
+    ```python
+    # FP32 dense vector
+    memory_bytes = dimension * 4  # 768 * 4 = 3,072 bytes
+    
+    # FP16 dense vector
+    memory_bytes = dimension * 2  # 768 * 2 = 1,536 bytes
+    
+    # INT8 dense vector
+    memory_bytes = dimension * 1  # 768 * 1 = 768 bytes
+    
+    # Sparse vector (depends on number of non-zero entries)
+    memory_bytes = num_nonzero * (4 + 4)  # 4 bytes for index, 4 for value
+    ```
+  </Accordion>
+
+  <Accordion title="Vector normalization">
+    Some distance metrics benefit from normalized vectors:
+    ```python
+    import numpy as np
+    
+    # Normalize vector to unit length (L2 norm = 1)
+    vector = np.array([0.1, 0.2, 0.3, ...])
+    normalized = vector / np.linalg.norm(vector)
+    
+    # For cosine similarity, normalization enables faster dot product
+    doc = Doc(
+        id="doc1",
+        vectors={"embedding": normalized.tolist()}
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Match vector type to your embedding model">
+    Choose the data type that matches your embedding model's output:
+    - Most transformer models → `VECTOR_FP32`
+    - BM25/TF-IDF → `SPARSE_VECTOR_FP32`
+  </Step>
+
+  <Step title="Validate dimensions before insertion">
+    Ensure your vectors match the schema's dimension before inserting:
+    ```python
+    expected_dim = collection.schema.vector("embedding").dimension
+    assert len(vector) == expected_dim, f"Expected {expected_dim}D vector"
+    ```
+  </Step>
+
+  <Step title="Use consistent precision">
+    Don't mix precision levels for the same field. If you define `VECTOR_FP32`, always insert FP32 vectors.
+  </Step>
+
+  <Step title="Consider memory constraints">
+    For large collections (millions of vectors), consider:
+    - Using FP16 instead of FP32 (50% memory savings)
+    - Quantizing to INT8 (75% memory savings)
+    - Using sparse vectors for high-dimensional data
+  </Step>
+
+  <Step title="Normalize vectors when appropriate">
+    For cosine similarity, normalize vectors to unit length before insertion for faster queries.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Indexing" icon="magnifying-glass" href="/concepts/indexing">
+    Learn how to index vectors for fast similarity search
+  </Card>
+  <Card title="Querying" icon="search" href="/concepts/querying">
+    Execute vector similarity searches
+  </Card>
+  <Card title="Schemas" icon="table" href="/concepts/schemas">
+    Understand how to define vector fields in schemas
+  </Card>
+  <Card title="Collections" icon="database" href="/concepts/collections">
+    Work with collections containing vectors
+  </Card>
+</CardGroup>

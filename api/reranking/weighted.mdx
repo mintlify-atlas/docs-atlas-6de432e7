@@ -1,0 +1,240 @@
+---
+title: WeightedReRanker
+description: Combine multi-vector search results with configurable weights
+---
+
+## Overview
+
+`WeightedReRanker` combines scores from multiple vector fields using a weighted sum. Each vector field's relevance score is normalized based on its metric type, then scaled by a user-provided weight. Final scores are summed across fields.
+
+<Note>
+  This reranker is specifically designed for multi-vector scenarios where query results from multiple vector fields need to be combined with configurable weights.
+</Note>
+
+## Constructor
+
+```python
+from zvec import MetricType
+from zvec.extension import WeightedReRanker
+
+reranker = WeightedReRanker(
+    topn=10,
+    rerank_field=None,
+    metric=MetricType.L2,
+    weights={"title_vec": 2.0, "content_vec": 1.0}
+)
+```
+
+### Parameters
+
+<ParamField path="topn" type="int" default="10">
+  Number of top documents to return after reranking.
+</ParamField>
+
+<ParamField path="rerank_field" type="str | None" default="None">
+  Ignored. This parameter exists for API consistency but has no effect.
+</ParamField>
+
+<ParamField path="metric" type="MetricType" default="MetricType.L2">
+  Distance metric used for score normalization. Supported metrics: `L2`, `IP` (inner product), `COSINE`. Scores are normalized to [0, 1] range.
+</ParamField>
+
+<ParamField path="weights" type="dict[str, float] | None" default="None">
+  Weight per vector field. Keys are vector field names, values are weight multipliers. Fields not listed use weight `1.0`.
+</ParamField>
+
+## Properties
+
+<ResponseField name="weights" type="dict[str, float]">
+  Weight mapping for vector fields.
+</ResponseField>
+
+<ResponseField name="metric" type="MetricType">
+  Distance metric used for score normalization.
+</ResponseField>
+
+<ResponseField name="topn" type="int">
+  Number of top documents to return.
+</ResponseField>
+
+## Methods
+
+### rerank()
+
+```python
+def rerank(self, query_results: dict[str, list[Doc]]) -> list[Doc]
+```
+
+Combine scores from multiple vector fields using weighted sum.
+
+<ParamField path="query_results" type="dict[str, list[Doc]]">
+  Results per vector field. Keys are vector field names, values are lists of documents.
+</ParamField>
+
+<ResponseField name="returns" type="list[Doc]">
+  Re-ranked documents with combined scores in the `score` field.
+</ResponseField>
+
+## Score Normalization
+
+Raw distance/similarity scores are normalized to [0, 1] based on the metric type:
+
+### L2 (Euclidean Distance)
+
+```python
+normalized_score = 1.0 - 2 * arctan(distance) / π
+```
+
+Smaller distances map to higher scores.
+
+### IP (Inner Product)
+
+```python
+normalized_score = 0.5 + arctan(score) / π
+```
+
+Higher inner products map to higher scores.
+
+### COSINE (Cosine Similarity)
+
+```python
+normalized_score = 1.0 - distance / 2.0
+```
+
+Smaller cosine distances map to higher scores.
+
+## Usage Examples
+
+### Basic Weighted Search
+
+```python
+from zvec import Collection, MetricType
+from zvec.extension import WeightedReRanker
+
+# Create collection
+collection = Collection("articles")
+
+# Title matches are 3x more important than content
+reranker = WeightedReRanker(
+    topn=10,
+    metric=MetricType.COSINE,
+    weights={
+        "title_vec": 3.0,
+        "content_vec": 1.0
+    }
+)
+
+results = collection.query(
+    vectors={
+        "title_vec": title_embedding,
+        "content_vec": content_embedding
+    },
+    topn=20,
+    reranker=reranker
+)
+
+for doc in results:
+    print(f"ID: {doc.id}, Weighted Score: {doc.score:.4f}")
+```
+
+### Dynamic Weight Adjustment
+
+```python
+# Adjust weights based on query type
+def get_reranker(query_type: str) -> WeightedReRanker:
+    if query_type == "navigational":
+        # Favor title matches for navigational queries
+        weights = {"title_vec": 5.0, "content_vec": 1.0, "tags_vec": 2.0}
+    elif query_type == "informational":
+        # Favor content for informational queries
+        weights = {"title_vec": 1.0, "content_vec": 4.0, "tags_vec": 1.5}
+    else:
+        # Balanced for other queries
+        weights = {"title_vec": 1.5, "content_vec": 2.0, "tags_vec": 1.0}
+    
+    return WeightedReRanker(
+        topn=10,
+        metric=MetricType.COSINE,
+        weights=weights
+    )
+
+reranker = get_reranker("navigational")
+results = collection.query(
+    vectors=query_vectors,
+    reranker=reranker
+)
+```
+
+### Equal Weights (Uniform Fusion)
+
+```python
+# When no weights specified, all fields have weight 1.0
+reranker = WeightedReRanker(
+    topn=10,
+    metric=MetricType.L2
+)
+
+results = collection.query(
+    vectors={
+        "vec1": embedding1,
+        "vec2": embedding2,
+        "vec3": embedding3
+    },
+    reranker=reranker
+)
+```
+
+## How It Works
+
+1. **Normalize Scores**: Convert raw distance/similarity scores to [0, 1] range
+2. **Apply Weights**: Multiply normalized scores by field weights
+3. **Sum Scores**: For each document, sum weighted scores across all fields
+4. **Rank**: Return top `n` documents by combined score
+
+### Example
+
+Given query results with COSINE metric:
+
+```python
+query_results = {
+    "title_vec": [Doc(id="A", score=0.1), Doc(id="B", score=0.3)],
+    "content_vec": [Doc(id="A", score=0.2), Doc(id="C", score=0.15)]
+}
+
+weights = {"title_vec": 2.0, "content_vec": 1.0}
+```
+
+Normalized and weighted scores:
+
+- **doc_A**: `(1 - 0.1/2) * 2.0 + (1 - 0.2/2) * 1.0` = `1.9 + 0.9` = `2.8`
+- **doc_B**: `(1 - 0.3/2) * 2.0` = `1.7`
+- **doc_C**: `(1 - 0.15/2) * 1.0` = `0.925`
+
+**Final ranking**: doc_A, doc_B, doc_C
+
+## When to Use Weighted Reranking
+
+<Check>
+  **Use WeightedReRanker when**:
+  - Different vector fields have different importance
+  - You have domain knowledge about field weights
+  - You need fine-grained control over score combination
+  - Working with multi-vector hybrid search
+</Check>
+
+<Warning>
+  **Consider alternatives when**:
+  - All fields have equal importance (use [RrfReRanker](/api/reranking/rrf))
+  - You need semantic understanding (use [QwenReRanker](/api/reranking/qwen))
+  - Weights are difficult to determine (try RRF first)
+</Warning>
+
+## Choosing Weights
+
+<Tip>
+  **Best Practices**:
+  - Start with equal weights (1.0) and adjust based on results
+  - Use 2-5x differences for important vs. less important fields
+  - Test with representative queries and measure relevance
+  - Consider query intent when setting weights dynamically
+</Tip>
